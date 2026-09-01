@@ -151,6 +151,32 @@ export function createWhatsAppPlugin(service: WhatsAppService): AgentPlugin {
         },
       },
       {
+        name: 'whatsapp_search_messages',
+        description: 'Busca full-text no histórico de mensagens WhatsApp (FTS offline)',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Termos de busca (ex: reunião CNPJ)' },
+            limit: { type: 'number', description: 'Máximo de resultados (padrão 10)' },
+          },
+          required: ['query'],
+        },
+        execute: async (args) => {
+          const blocked = guard();
+          if (blocked) return blocked;
+          const query = String(args.query);
+          const limit = Number(args.limit ?? 10);
+          const hits = await client.searchMessages(query, limit);
+          if (hits.length === 0) {
+            return { success: false, output: `Nenhuma mensagem encontrada para "${query}".` };
+          }
+          const lines = hits.map(
+            (h) => `- ${h.chat_jid}: ${h.body.slice(0, 120)} (score ${h.score.toFixed(2)})`
+          );
+          return { success: true, output: lines.join('\n'), data: hits };
+        },
+      },
+      {
         name: 'whatsapp_read_messages',
         description: 'Lê mensagens recentes de um chat (telefone, JID ou nome mapeado no inbox)',
         parameters: {

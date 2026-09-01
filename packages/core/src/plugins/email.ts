@@ -1,4 +1,5 @@
 import type { AgentPlugin } from '../types.js';
+import { isEmailConfigured, listUnreadEmails, sendEmail } from '../email-service.js';
 
 export function createEmailPlugin(): AgentPlugin {
   return {
@@ -11,7 +12,7 @@ export function createEmailPlugin(): AgentPlugin {
         description: 'Verifica se o plugin de e-mail está configurado',
         parameters: { type: 'object', properties: {} },
         execute: async () => {
-          const configured = !!(process.env.EMAIL_IMAP_HOST && process.env.EMAIL_SMTP_HOST);
+          const configured = isEmailConfigured();
           return {
             success: true,
             output: configured
@@ -29,17 +30,27 @@ export function createEmailPlugin(): AgentPlugin {
             limit: { type: 'number', description: 'Máximo de e-mails (padrão 10)' },
           },
         },
-        execute: async () => {
-          if (!process.env.EMAIL_IMAP_HOST) {
+        execute: async (args: Record<string, unknown>) => {
+          if (!isEmailConfigured()) {
             return {
               success: false,
               output: 'Plugin e-mail não configurado. Veja .env.example (EMAIL_IMAP_HOST, etc.)',
             };
           }
-          return {
-            success: false,
-            output: 'Leitura IMAP em implementação (#10). Configure as variáveis e aguarde próxima versão.',
-          };
+          try {
+            const limit = Number(args.limit ?? 10);
+            const emails = await listUnreadEmails(limit);
+            if (emails.length === 0) {
+              return { success: true, output: 'Nenhum e-mail não lido.' };
+            }
+            const lines = emails.map(
+              (e) => `- [${e.uid}] ${e.from} | ${e.subject} | ${e.date}\n  ${e.preview.slice(0, 120)}`
+            );
+            return { success: true, output: lines.join('\n'), data: emails };
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            return { success: false, output: message };
+          }
         },
       },
       {
@@ -54,17 +65,24 @@ export function createEmailPlugin(): AgentPlugin {
           },
           required: ['to', 'subject', 'body'],
         },
-        execute: async () => {
-          if (!process.env.EMAIL_SMTP_HOST) {
+        execute: async (args: Record<string, unknown>) => {
+          if (!isEmailConfigured()) {
             return {
               success: false,
               output: 'Plugin e-mail não configurado. Veja .env.example',
             };
           }
-          return {
-            success: false,
-            output: 'Envio SMTP em implementação (#10).',
-          };
+          try {
+            const output = await sendEmail(
+              String(args.to),
+              String(args.subject),
+              String(args.body)
+            );
+            return { success: true, output };
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            return { success: false, output: message };
+          }
         },
       },
     ],

@@ -1,1 +1,1 @@
-export type AppView = 'chat' | 'tasks' | 'whatsapp';
+export type AppView = 'chat' | 'tasks' | 'whatsapp' | 'settings';

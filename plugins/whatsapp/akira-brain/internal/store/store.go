@@ -179,7 +179,80 @@ func (s *Store) InsertMessage(m Message) error {
 		m.ID, m.ChatJID, m.ProjectID, m.SenderJID, boolToInt(m.IsFromMe), m.Timestamp,
 		m.Type, m.Body, m.Caption, boolToInt(m.IsMedia), m.Mimetype, nullIfEmpty(m.MediaLocalPath), m.RetentionClass,
 	)
+	if err != nil {
+		return err
+	}
+	searchBody := strings.TrimSpace(m.Body)
+	if searchBody == "" {
+		searchBody = strings.TrimSpace(m.Caption)
+	}
+	if searchBody != "" {
+		_, _ = s.db.Exec(
+			`INSERT INTO messages_fts(message_id, chat_jid, body) VALUES (?, ?, ?)`,
+			m.ID, m.ChatJID, searchBody,
+		)
+	}
+	return nil
+}
+
+func (s *Store) UpdateMessageBody(id, body string) error {
+	_, err := s.db.Exec(`UPDATE messages SET body = ? WHERE id = ?`, body, id)
+	if err != nil {
+		return err
+	}
+	var chatJID string
+	row := s.db.QueryRow(`SELECT chat_jid FROM messages WHERE id = ?`, id)
+	if err := row.Scan(&chatJID); err != nil {
+		return err
+	}
+	_, _ = s.db.Exec(`DELETE FROM messages_fts WHERE message_id = ?`, id)
+	if strings.TrimSpace(body) != "" {
+		_, err = s.db.Exec(
+			`INSERT INTO messages_fts(message_id, chat_jid, body) VALUES (?, ?, ?)`,
+			id, chatJID, body,
+		)
+	}
 	return err
+}
+
+type SearchHit struct {
+	MessageID string
+	ChatJID   string
+	Body      string
+	Score     float64
+}
+
+func (s *Store) SearchMessages(query string, limit int) ([]SearchHit, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	ftsQuery := strings.Join(strings.Fields(query), " AND ")
+	rows, err := s.db.Query(
+		`SELECT message_id, chat_jid, body, rank
+		 FROM messages_fts
+		 WHERE messages_fts MATCH ?
+		 ORDER BY rank
+		 LIMIT ?`,
+		ftsQuery, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []SearchHit
+	for rows.Next() {
+		var hit SearchHit
+		if err := rows.Scan(&hit.MessageID, &hit.ChatJID, &hit.Body, &hit.Score); err != nil {
+			return nil, err
+		}
+		out = append(out, hit)
+	}
+	return out, rows.Err()
 }
 
 // TrimInbox keeps only the most recent `max` inbox_preview messages for a chat.

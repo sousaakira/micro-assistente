@@ -30,6 +30,7 @@ export interface PluginInfo {
   name: string;
   description: string;
   toolCount: number;
+  enabled: boolean;
 }
 
 export interface ChatSession {
@@ -162,6 +163,29 @@ export interface AkiraBrainProject {
   created_at: number;
 }
 
+export interface AgentConfigResponse {
+  config: {
+    llm: {
+      provider: 'llama-cpp' | 'ollama' | 'openai';
+      baseUrl: string;
+      model: string;
+      maxTokens: number;
+      apiKey?: string;
+    };
+    disabledPlugins: string[];
+    updatedAt: string;
+  };
+  effectiveLlm: AgentConfigResponse['config']['llm'];
+  plugins: PluginInfo[];
+}
+
+export interface MessageSearchHit {
+  message_id: string;
+  chat_jid: string;
+  body: string;
+  score: number;
+}
+
 const BASE = '/api';
 
 async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
@@ -187,6 +211,15 @@ export const api = {
   startAgent: () => fetchJSON<AgentStatus>('/agent/start', { method: 'POST' }),
   stopAgent: () => fetchJSON<AgentStatus>('/agent/stop', { method: 'POST' }),
   plugins: () => fetchJSON<PluginInfo[]>('/plugins'),
+  agentConfig: () => fetchJSON<AgentConfigResponse>('/agent/config'),
+  updateAgentConfig: (data: {
+    llm?: Partial<AgentConfigResponse['config']['llm']>;
+    disabledPlugins?: string[];
+  }) =>
+    fetchJSON<AgentConfigResponse>('/agent/config', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
 
   chatSessions: () => fetchJSON<ChatSession[]>('/chat/sessions'),
   createChatSession: (title?: string) =>
@@ -253,6 +286,10 @@ export const api = {
   whatsappSearchContacts: (sessionId: string, q: string, limit = 10) =>
     fetchJSON<InboxChat[]>(
       `/integrations/whatsapp/contacts/search?sessionId=${encodeURIComponent(sessionId)}&q=${encodeURIComponent(q)}&limit=${limit}`
+    ),
+  whatsappSearchMessages: (sessionId: string, q: string, limit = 20) =>
+    fetchJSON<MessageSearchHit[]>(
+      `/integrations/whatsapp/messages/search?sessionId=${encodeURIComponent(sessionId)}&q=${encodeURIComponent(q)}&limit=${limit}`
     ),
 
   schedules: () => fetchJSON<TaskSchedule[]>('/schedules'),

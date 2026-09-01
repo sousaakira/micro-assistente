@@ -244,4 +244,24 @@ export function registerWhatsAppRoutes(app: Express, service: WhatsAppService): 
       res.status(502).json({ error: message });
     }
   });
+
+  app.get('/integrations/whatsapp/messages/search', async (req, res) => {
+    const sessionId =
+      typeof req.query.sessionId === 'string' ? req.query.sessionId : undefined;
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const limit = Number(req.query.limit ?? 20);
+
+    if (!q) {
+      res.status(400).json({ error: 'q é obrigatório' });
+      return;
+    }
+
+    try {
+      const hits = await service.getClient().searchMessages(q, limit, sessionId);
+      res.json(hits);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(502).json({ error: message });
+    }
+  });
 }

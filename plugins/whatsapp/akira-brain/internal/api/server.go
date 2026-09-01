@@ -41,6 +41,7 @@ func (srv *Server) routes() {
 	srv.mux.HandleFunc("/api/inbox", srv.handleInbox)
 	srv.mux.HandleFunc("/api/map", srv.handleMap)
 	srv.mux.HandleFunc("/api/messages", srv.handleMessages)
+	srv.mux.HandleFunc("/api/search", srv.handleSearch)
 }
 
 // ListenAndServe binds to 127.0.0.1:port and serves the API.
@@ -344,6 +345,46 @@ func (srv *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 			Type:      m.Type,
 			Body:      m.Body,
 			IsMedia:   m.IsMedia,
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+type searchHitDTO struct {
+	MessageID string  `json:"message_id"`
+	ChatJID   string  `json:"chat_jid"`
+	Body      string  `json:"body"`
+	Score     float64 `json:"score"`
+}
+
+func (srv *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		writeError(w, http.StatusBadRequest, errMissingField("q"))
+		return
+	}
+	limit := 20
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	hits, err := srv.store.SearchMessages(q, limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	out := make([]searchHitDTO, 0, len(hits))
+	for _, h := range hits {
+		out = append(out, searchHitDTO{
+			MessageID: h.MessageID,
+			ChatJID:   h.ChatJID,
+			Body:      h.Body,
+			Score:     h.Score,
 		})
 	}
 	writeJSON(w, http.StatusOK, out)

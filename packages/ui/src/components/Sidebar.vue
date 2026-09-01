@@ -15,6 +15,7 @@ const NAV: Array<{ id: AppView; label: string; icon: string }> = [
   { id: 'chat', label: 'Chat', icon: '◌' },
   { id: 'tasks', label: 'Tarefas', icon: '☰' },
   { id: 'whatsapp', label: 'WhatsApp', icon: '◉' },
+  { id: 'settings', label: 'Config', icon: '⚙' },
 ];
 </script>
 

@@ -42,6 +42,13 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_messages_project_ts ON messages(project_id, timestamp);
 CREATE INDEX IF NOT EXISTS idx_messages_chat_ts ON messages(chat_jid, timestamp);
 
+CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+	message_id UNINDEXED,
+	chat_jid,
+	body,
+	tokenize='unicode61 remove_diacritics 2'
+);
+
 CREATE TABLE IF NOT EXISTS inbox_retention_config (
 	id INTEGER PRIMARY KEY CHECK (id = 1),
 	max_messages_per_contact INTEGER NOT NULL DEFAULT 50

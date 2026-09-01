@@ -4,14 +4,18 @@ import { useQuery } from '@tanstack/vue-query';
 import { api } from '../lib/api';
 import type { AppView } from '../types/app';
 import ChatPage from '../pages/ChatPage.vue';
+import SettingsPage from '../pages/SettingsPage.vue';
 import TasksPage from '../pages/TasksPage.vue';
 import WhatsAppPage from '../pages/WhatsAppPage.vue';
 import Sidebar from './Sidebar.vue';
 import StatusBar from './StatusBar.vue';
+import { useRealtime } from '../composables/useRealtime';
 
 const LAST_SEEN_KEY = 'whatsapp-inbox-last-seen';
 
 const view = ref<AppView>('chat');
+
+useRealtime();
 
 const { data: tasks } = useQuery({
   queryKey: ['tasks'],
@@ -100,6 +104,7 @@ watch(
             <ChatPage v-if="view === 'chat'" />
             <TasksPage v-else-if="view === 'tasks'" />
             <WhatsAppPage v-else-if="view === 'whatsapp'" />
+            <SettingsPage v-else-if="view === 'settings'" />
           </div>
         </Transition>
       </div>

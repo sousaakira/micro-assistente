@@ -9,6 +9,15 @@ export const CHAT_ONLY_TOOLS = new Set([
 
 export class PluginRegistry {
   private plugins = new Map<string, AgentPlugin>();
+  private disabled = new Set<string>();
+
+  setDisabled(pluginIds: string[]): void {
+    this.disabled = new Set(pluginIds);
+  }
+
+  isEnabled(pluginId: string): boolean {
+    return !this.disabled.has(pluginId);
+  }
 
   register(plugin: AgentPlugin): void {
     if (this.plugins.has(plugin.id)) {
@@ -26,10 +35,11 @@ export class PluginRegistry {
   }
 
   getAll(): AgentPlugin[] {
-    return [...this.plugins.values()];
+    return [...this.plugins.values()].filter((p) => this.isEnabled(p.id));
   }
 
   getToolsForPlugin(pluginId?: string): PluginTool[] {
+    if (pluginId && !this.isEnabled(pluginId)) return [];
     if (pluginId) {
       return this.plugins.get(pluginId)?.tools ?? [];
     }
@@ -64,12 +74,13 @@ export class PluginRegistry {
     }
   }
 
-  list(): Array<{ id: string; name: string; description: string; toolCount: number }> {
-    return this.getAll().map((p) => ({
+  list(): Array<{ id: string; name: string; description: string; toolCount: number; enabled: boolean }> {
+    return [...this.plugins.values()].map((p) => ({
       id: p.id,
       name: p.name,
       description: p.description,
       toolCount: p.tools.length,
+      enabled: this.isEnabled(p.id),
     }));
   }
 }

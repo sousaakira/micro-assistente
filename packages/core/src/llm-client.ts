@@ -4,6 +4,14 @@ import type { LLMConfig, LLMMessage, LLMResponse, PluginTool } from './types.js'
 export class LLMClient {
   constructor(private config: LLMConfig) {}
 
+  updateConfig(config: LLMConfig): void {
+    this.config = config;
+  }
+
+  getConfig(): LLMConfig {
+    return { ...this.config };
+  }
+
   async chat(messages: LLMMessage[], tools?: PluginTool[]): Promise<LLMResponse> {
     if (this.config.provider === 'ollama') {
       return this.chatOllama(messages, tools);

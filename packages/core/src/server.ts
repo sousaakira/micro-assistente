@@ -1,13 +1,15 @@
 import 'dotenv/config';
+import { createServer } from 'node:http';
 import cors from 'cors';
 import express, { type Express } from 'express';
 import { z } from 'zod';
+import { AgentConfigStore, type AgentConfig } from './agent-config.js';
 import { AgentOrchestrator } from './orchestrator.js';
 import { HAGMemory } from './hag-memory.js';
 import { LLMClient } from './llm-client.js';
 import { PluginRegistry } from './plugin-registry.js';
+import { publishAgentEvent, registerRealtime } from './realtime.js';
 import { TaskQueue } from './task-queue.js';
-import type { LLMProvider } from './types.js';
 import { createBuiltinPlugin } from './plugins/builtin.js';
 import { createEmailPlugin } from './plugins/email.js';
 import { createServersPlugin } from './plugins/servers.js';
@@ -24,16 +26,12 @@ const HOST = process.env.AGENT_HOST ?? '127.0.0.1';
 const taskQueue = new TaskQueue(process.env.TASKS_DB_PATH ?? './data/tasks.db');
 const memory = new HAGMemory(process.env.HAG_PATH ?? './data/hag');
 const plugins = new PluginRegistry();
+const agentConfigStore = new AgentConfigStore(
+  process.env.AGENT_CONFIG_PATH ?? './data/agent-config.json'
+);
+plugins.setDisabled(agentConfigStore.get().disabledPlugins);
 
-const llm = new LLMClient({
-  provider: (process.env.LLM_PROVIDER ?? 'llama-cpp') as LLMProvider,
-  baseUrl: process.env.LLM_BASE_URL ?? 'https://ia.lo',
-  model:
-    process.env.LLM_MODEL ??
-    'Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-Q4_K_P.gguf',
-  maxTokens: Number(process.env.LLM_MAX_TOKENS ?? 2048),
-  apiKey: process.env.LLM_API_KEY,
-});
+const llm = new LLMClient(agentConfigStore.getEffectiveLLM());
 
 plugins.register(createBuiltinPlugin());
 const orchestrator = new AgentOrchestrator(taskQueue, llm, memory, plugins);
@@ -81,6 +79,7 @@ app.post('/tasks', (req, res) => {
     return;
   }
   const task = taskQueue.add(parsed.data);
+  publishAgentEvent('tasks', { action: 'created', task });
   res.status(201).json(task);
 });
 
@@ -95,6 +94,7 @@ app.patch('/tasks/:id', (req, res) => {
     res.status(404).json({ error: 'Tarefa não encontrada' });
     return;
   }
+  publishAgentEvent('tasks', { action: 'updated', task });
   res.json(task);
 });
 
@@ -104,6 +104,7 @@ app.delete('/tasks/:id', (req, res) => {
     res.status(404).json({ error: 'Tarefa não encontrada' });
     return;
   }
+  publishAgentEvent('tasks', { action: 'deleted', id: req.params.id });
   res.status(204).end();
 });
 
@@ -163,12 +164,64 @@ app.get('/agent/status', (_req, res) => {
 
 app.post('/agent/start', (_req, res) => {
   orchestrator.start();
-  res.json(orchestrator.getStatus());
+  const status = orchestrator.getStatus();
+  publishAgentEvent('agent', status);
+  res.json(status);
 });
 
 app.post('/agent/stop', (_req, res) => {
   orchestrator.stop();
-  res.json(orchestrator.getStatus());
+  const status = orchestrator.getStatus();
+  publishAgentEvent('agent', status);
+  res.json(status);
+});
+
+const agentConfigSchema = z.object({
+  llm: z
+    .object({
+      provider: z.enum(['llama-cpp', 'ollama', 'openai']).optional(),
+      baseUrl: z.string().min(1).optional(),
+      model: z.string().min(1).optional(),
+      maxTokens: z.coerce.number().min(256).max(32768).optional(),
+      apiKey: z.string().optional(),
+    })
+    .optional(),
+  disabledPlugins: z.array(z.string()).optional(),
+});
+
+app.get('/agent/config', (_req, res) => {
+  res.json({
+    config: agentConfigStore.get(),
+    effectiveLlm: agentConfigStore.getEffectiveLLM(),
+    plugins: plugins.list(),
+  });
+});
+
+app.patch('/agent/config', (req, res) => {
+  const parsed = agentConfigSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const updated = agentConfigStore.update({
+    llm: parsed.data.llm
+      ? {
+          ...parsed.data.llm,
+          provider: parsed.data.llm.provider as AgentConfig['llm']['provider'] | undefined,
+        }
+      : undefined,
+    disabledPlugins: parsed.data.disabledPlugins,
+  });
+  plugins.setDisabled(updated.disabledPlugins);
+  llm.updateConfig(agentConfigStore.getEffectiveLLM());
+  publishAgentEvent('config', updated);
+
+  res.json({
+    config: updated,
+    effectiveLlm: agentConfigStore.getEffectiveLLM(),
+    plugins: plugins.list(),
+  });
 });
 
 app.get('/plugins', (_req, res) => {
@@ -220,6 +273,10 @@ app.post('/chat', async (req, res) => {
 
 registerWhatsAppRoutes(app, whatsappService);
 
+const appInstance = app;
+const httpServer = createServer(appInstance);
+registerRealtime(appInstance, httpServer);
+
 const shutdown = async (signal: string) => {
   console.log(`\n${signal} — encerrando serviços WhatsApp…`);
   await whatsappService.stopServices();
@@ -229,7 +286,7 @@ const shutdown = async (signal: string) => {
 process.on('SIGINT', () => void shutdown('SIGINT'));
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
-app.listen(PORT, HOST, () => {
+httpServer.listen(PORT, HOST, () => {
   console.log(`Micro Assistente API → http://${HOST}:${PORT}`);
   void whatsappService.ensureRunning().catch((err) => {
     const message = err instanceof Error ? err.message : String(err);
@@ -237,4 +294,4 @@ app.listen(PORT, HOST, () => {
   });
 });
 
-export { app, orchestrator, taskQueue, taskScheduler, memory, plugins, llm, chatService, chatStore };
+export { app, httpServer, orchestrator, taskQueue, taskScheduler, memory, plugins, llm, chatService, chatStore, agentConfigStore };

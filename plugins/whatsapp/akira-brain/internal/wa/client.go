@@ -306,6 +306,7 @@ func (c *Client) onEvent(evt any) {
 		if err := ingest.PersistIncomingNamed(c.store, e, displayName); err != nil {
 			fmt.Println("Erro ao persistir mensagem:", err)
 		}
+		c.maybeTranscribeAudio(e)
 	case *events.PushName:
 		if e != nil && strings.TrimSpace(e.NewPushName) != "" {
 			_ = c.store.UpsertContact(e.JID.String(), strings.TrimSpace(e.NewPushName), false)

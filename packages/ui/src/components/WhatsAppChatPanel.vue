@@ -15,6 +15,9 @@ const queryClient = useQueryClient();
 const selectedChat = ref<InboxChat | null>(null);
 const pendingMessages = ref<WhatsAppStoredMessage[]>([]);
 const bottomRef = ref<HTMLElement | null>(null);
+const searchQuery = ref('');
+const searchResults = ref<Array<{ message_id: string; chat_jid: string; body: string; score: number }>>([]);
+const searching = ref(false);
 
 const { data: inbox, isLoading: inboxLoading } = useQuery({
   queryKey: computed(() => ['whatsapp-inbox', props.sessionId]),
@@ -96,6 +99,29 @@ function formatTime(ts: number) {
     minute: '2-digit',
   });
 }
+
+async function runSearch() {
+  const q = searchQuery.value.trim();
+  if (!q) {
+    searchResults.value = [];
+    return;
+  }
+  searching.value = true;
+  try {
+    searchResults.value = await api.whatsappSearchMessages(props.sessionId, q, 15);
+  } catch {
+    searchResults.value = [];
+  } finally {
+    searching.value = false;
+  }
+}
+
+function openSearchHit(hit: { chat_jid: string }) {
+  const chat = inbox.value?.find((c) => c.chat_jid === hit.chat_jid);
+  if (chat) selectChat(chat);
+  searchResults.value = [];
+  searchQuery.value = '';
+}
 </script>
 
 <template>
@@ -111,6 +137,29 @@ function formatTime(ts: number) {
         <div class="sidebar-header">
           <span class="sidebar-title">Conversas</span>
           <span class="sidebar-sub">{{ sessionLabel }}</span>
+          <div class="search-row">
+            <input
+              v-model="searchQuery"
+              class="search-input"
+              placeholder="Buscar no histórico…"
+              @keydown.enter.prevent="runSearch"
+            />
+            <button type="button" class="search-btn" :disabled="searching" @click="runSearch">
+              {{ searching ? '…' : 'Buscar' }}
+            </button>
+          </div>
+          <div v-if="searchResults.length > 0" class="search-results">
+            <button
+              v-for="hit in searchResults"
+              :key="hit.message_id"
+              type="button"
+              class="search-hit"
+              @click="openSearchHit(hit)"
+            >
+              <span class="search-hit-body">{{ hit.body.slice(0, 80) }}</span>
+              <span class="search-hit-meta">{{ hit.chat_jid.split('@')[0] }}</span>
+            </button>
+          </div>
         </div>
         <div class="chat-list">
           <p v-if="inboxLoading" class="hint">Carregando…</p>
@@ -362,5 +411,51 @@ function formatTime(ts: number) {
   color: var(--text-muted);
   padding: 12px;
   text-align: center;
+}
+.search-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.search-input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  font-size: 12px;
+}
+.search-btn {
+  padding: 8px 10px;
+  font-size: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.search-results {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+.search-hit {
+  text-align: left;
+  padding: 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.search-hit-body {
+  display: block;
+  font-size: 12px;
+}
+.search-hit-meta {
+  display: block;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  margin-top: 2px;
 }
 </style>

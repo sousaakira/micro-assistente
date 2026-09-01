@@ -181,6 +181,15 @@ export class WhatsAppClient {
     });
   }
 
+  async searchMessages(
+    query: string,
+    limit = 20,
+    sessionId?: string
+  ): Promise<Array<{ message_id: string; chat_jid: string; body: string; score: number }>> {
+    const url = `${this.getSessionUrl(sessionId)}/api/search?q=${encodeURIComponent(query)}&limit=${limit}`;
+    return this.fetchJSON(url);
+  }
+
   async findChatByName(name: string, sessionId?: string): Promise<InboxChat | null> {
     const results = await this.searchContacts(name, 1, sessionId);
     return results[0] ?? null;
