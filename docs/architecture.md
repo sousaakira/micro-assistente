@@ -114,3 +114,7 @@ Plugins são carregados dinamicamente pelo `PluginRegistry` a partir de `plugins
 | POST | `/agent/stop` | Parar processamento |
 | GET | `/agent/status` | Status atual |
 | GET | `/plugins` | Plugins carregados |
+| GET | `/chat/sessions` | Listar sessões de chat |
+| POST | `/chat/sessions` | Criar sessão |
+| GET | `/chat/sessions/:id/messages` | Mensagens da sessão |
+| POST | `/chat` | Enviar mensagem (`{ message, sessionId? }`) |

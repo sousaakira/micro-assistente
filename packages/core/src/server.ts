@@ -8,6 +8,9 @@ import { LLMClient } from './llm-client.js';
 import { PluginRegistry } from './plugin-registry.js';
 import { TaskQueue } from './task-queue.js';
 import { createBuiltinPlugin } from './plugins/builtin.js';
+import { createTasksPlugin } from './plugins/tasks.js';
+import { ChatStore } from './chat-store.js';
+import { ChatService } from './chat-service.js';
 
 const PORT = Number(process.env.AGENT_PORT ?? 3847);
 const HOST = process.env.AGENT_HOST ?? '127.0.0.1';
@@ -23,6 +26,10 @@ const llm = new LLMClient({
 
 plugins.register(createBuiltinPlugin());
 const orchestrator = new AgentOrchestrator(taskQueue, llm, memory, plugins);
+plugins.register(createTasksPlugin(taskQueue, orchestrator));
+
+const chatStore = new ChatStore(process.env.CHAT_DB_PATH ?? './data/chat.db');
+const chatService = new ChatService(chatStore, llm, memory, taskQueue, plugins);
 
 const app: Express = express();
 app.use(cors());
@@ -103,8 +110,47 @@ app.get('/memory', (_req, res) => {
   res.json(memory.getAll());
 });
 
+app.get('/chat/sessions', (_req, res) => {
+  res.json(chatService.listSessions());
+});
+
+app.post('/chat/sessions', (req, res) => {
+  const title = typeof req.body?.title === 'string' ? req.body.title : undefined;
+  res.status(201).json(chatService.createSession(title));
+});
+
+app.get('/chat/sessions/:id/messages', (req, res) => {
+  const session = chatStore.getSession(req.params.id);
+  if (!session) {
+    res.status(404).json({ error: 'Sessão não encontrada' });
+    return;
+  }
+  res.json(chatService.getMessages(req.params.id));
+});
+
+const sendChatSchema = z.object({
+  message: z.string().min(1),
+  sessionId: z.string().uuid().optional(),
+});
+
+app.post('/chat', async (req, res) => {
+  const parsed = sendChatSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  try {
+    const reply = await chatService.send(parsed.data);
+    res.json(reply);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: message });
+  }
+});
+
 app.listen(PORT, HOST, () => {
   console.log(`Micro Assistente API → http://${HOST}:${PORT}`);
 });
 
-export { app, orchestrator, taskQueue, memory, plugins, llm };
+export { app, orchestrator, taskQueue, memory, plugins, llm, chatService, chatStore };

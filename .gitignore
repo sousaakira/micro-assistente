@@ -13,3 +13,4 @@ coverage/
 .vite/
 .cache/
 *.tsbuildinfo
+data/

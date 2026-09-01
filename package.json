@@ -3,16 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "description": "Agente inteligente leve para tarefas locais com IA local, plugins e memória HAG",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "pnpm --parallel -r dev",
-    "dev:core": "pnpm --filter @micro-assistente/core dev",
-    "dev:ui": "pnpm --filter @micro-assistente/ui dev",
-    "build": "pnpm -r build",
-    "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck"
+    "dev": "concurrently -n core,ui -c blue,green \"npm run dev:core\" \"npm run dev:ui\"",
+    "dev:core": "npm run dev -w @micro-assistente/core",
+    "dev:ui": "npm run dev -w @micro-assistente/ui",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
   },
   "engines": {
     "node": ">=20"
-  },
-  "packageManager": "pnpm@9.15.0"
+  }
 }

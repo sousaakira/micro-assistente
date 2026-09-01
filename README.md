@@ -13,10 +13,10 @@ Agente inteligente **leve** para automação de tarefas locais com IA local, mem
 ## Início Rápido
 
 ```bash
-# Pré-requisitos: Node 20+, pnpm, Ollama
+# Pré-requisitos: Node 20+, npm ou yarn, Ollama
 cp .env.example .env
-pnpm install
-pnpm dev
+npm install   # ou: yarn install
+npm run dev   # ou: yarn dev
 ```
 
 - **API:** http://127.0.0.1:3847

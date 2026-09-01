@@ -82,3 +82,38 @@ export interface LLMConfig {
   model: string;
   maxTokens: number;
 }
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  sessionId: string;
+  role: 'user' | 'assistant' | 'tool';
+  content: string;
+  toolName?: string;
+  toolCalls?: ToolCall[];
+  toolActivities?: ToolActivity[];
+  createdAt: string;
+}
+
+export interface SendChatInput {
+  message: string;
+  sessionId?: string;
+}
+
+export interface ChatReply {
+  sessionId: string;
+  message: ChatMessage;
+  toolActivities: ToolActivity[];
+}
+
+export interface ToolActivity {
+  name: string;
+  input: Record<string, unknown>;
+  output: string;
+}

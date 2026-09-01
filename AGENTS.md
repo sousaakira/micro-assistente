@@ -212,18 +212,29 @@ Este é um **tool de produtividade** → peso **Emil Kowalski** (Linear):
 ## Comandos de Desenvolvimento
 
 ```bash
-pnpm install          # instalar dependências
-pnpm dev              # core + UI em paralelo
-pnpm dev:core         # apenas backend
-pnpm dev:ui           # apenas frontend
-pnpm build            # build de produção
-pnpm typecheck        # verificação de tipos
+npm install           # ou: yarn install
+npm run dev           # core + UI em paralelo
+npm run dev:core      # apenas backend
+npm run dev:ui        # apenas frontend
+npm run build         # build de produção
+npm run typecheck     # verificação de tipos
+```
+
+Equivalente com **yarn**:
+
+```bash
+yarn install
+yarn dev
+yarn dev:core
+yarn dev:ui
+yarn build
+yarn typecheck
 ```
 
 ### Pré-requisitos
 
 - Node.js ≥ 20
-- pnpm 9
+- npm (incluso no Node) ou Yarn 1.x/4.x
 - Ollama (ou LLM compatível) rodando localmente
 - Modelo configurado em `.env` (ex: `gemma2:9b`)
 
@@ -241,7 +252,7 @@ Antes de abrir um PR, verifique:
 - [ ] `prefers-reduced-motion` respeitado
 - [ ] Plugin não acoplado ao core (se aplicável)
 - [ ] `.env.example` atualizado (se novas vars)
-- [ ] Typecheck passa (`pnpm typecheck`)
+- [ ] Typecheck passa (`npm run typecheck`)
 
 ---
 

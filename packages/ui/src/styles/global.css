@@ -32,6 +32,8 @@
 html {
   font-size: 15px;
   -webkit-font-smoothing: antialiased;
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
@@ -39,11 +41,12 @@ body {
   background: var(--bg);
   color: var(--text);
   line-height: 1.5;
-  min-height: 100vh;
+  height: 100%;
+  overflow: hidden;
 }
 
 #root {
-  min-height: 100vh;
+  height: 100%;
 }
 
 button {

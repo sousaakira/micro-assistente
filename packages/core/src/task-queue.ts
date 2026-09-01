@@ -122,6 +122,40 @@ export class TaskQueue {
     return row.count;
   }
 
+  getByStatus(status: TaskStatus, limit = 20): Task[] {
+    const rows = this.db
+      .prepare('SELECT * FROM tasks WHERE status = ? ORDER BY created_at ASC LIMIT ?')
+      .all(status, limit) as Row[];
+    return rows.map(mapRow);
+  }
+
+  /** Resumo compacto da fila para injeção no prompt da LLM */
+  formatQueueContext(maxChars = 900): string {
+    const pending = this.countByStatus('pending');
+    const running = this.countByStatus('running');
+    const completed = this.countByStatus('completed');
+    const failed = this.countByStatus('failed');
+
+    let output = `Fila: ${pending} pendente(s), ${running} executando, ${completed} concluída(s), ${failed} falha(s).\n`;
+
+    const append = (label: string, tasks: Task[]) => {
+      if (tasks.length === 0) return;
+      output += `${label}: `;
+      for (const t of tasks) {
+        const line = `"${t.title}" [${t.status}]`;
+        if (output.length + line.length > maxChars) break;
+        output += line + '; ';
+      }
+      output += '\n';
+    };
+
+    append('Executando', this.getByStatus('running', 3));
+    append('Próximas', this.getByStatus('pending', 5));
+    append('Falhas recentes', this.getByStatus('failed', 3));
+
+    return output.trim().slice(0, maxChars);
+  }
+
   close(): void {
     this.db.close();
   }
