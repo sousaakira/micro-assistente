@@ -1,0 +1,24 @@
+{
+  "name": "@micro-assistente/plugin-whatsapp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Plugin WhatsApp — bot Go (AkiraBrain/whatsmeow) + bridge TypeScript",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "build:go": "npm run build:whatsmeow-api && npm run build:akira-brain",
+    "build:whatsmeow-api": "cd whatsmeow-api && go build -o main .",
+    "build:akira-brain": "cd akira-brain && go build -o akira-brain ./cmd/akira-brain",
+    "start:whatsmeow": "cd whatsmeow-api && node src/server.js",
+    "start:brain": "cd akira-brain && AKIRA_BRAIN_DATA=./data AKIRA_BRAIN_API_PORT=8765 ./akira-brain serve"
+  }
+}

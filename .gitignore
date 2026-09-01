@@ -1,0 +1,23 @@
+node_modules/
+dist/
+build/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+coverage/
+.turbo/
+*.db
+*.sqlite
+.vite/
+.cache/
+*.tsbuildinfo
+data/
+
+# Plugin WhatsApp — binários e sessões
+plugins/whatsapp/whatsmeow-api/main
+plugins/whatsapp/akira-brain/akira-brain
+plugins/whatsapp/whatsmeow-api/tokens/
+plugins/whatsapp/whatsmeow-api/data/
+plugins/whatsapp/akira-brain/data/

@@ -1,0 +1,32 @@
+---
+description: Padrões do Micro Assistente — workflow GitHub, arquitetura leve e motion UI
+alwaysApply: true
+---
+
+# Micro Assistente — Regras do Projeto
+
+Leia **AGENTS.md** na raiz antes de qualquer alteração.
+
+## Workflow obrigatório
+- Toda tarefa precisa de **Issue** antes do código
+- Trabalhe em **branch** (`feat/issue-N-slug`) e abra **PR** referenciando a Issue (`Closes #N`)
+- Nunca faça push direto em `main`
+
+## Arquitetura
+- `packages/core` — orquestrador, LLM, fila, HAG, plugins
+- `packages/ui` — dashboard React com motion
+- Plugins externos vivem em `plugins/` (ex: `plugins/whatsapp/` com bot Go embutido)
+- Plugins **nunca** acoplados ao core — use `PluginRegistry`
+
+## IA local — contexto mínimo
+- Prompts compactos (< 1000 tokens input)
+- Histórico: apenas último turno
+- Memória via HAG, não via contexto da LLM
+
+## UI — Motion obrigatório
+- Skeleton em carregamentos
+- Lazy loading com `React.lazy` + `Suspense`
+- Enter: opacity + translateY + blur (spring, bounce: 0, ~180ms)
+- Exit mais sutil que enter
+- `prefers-reduced-motion` respeitado
+- Skill: `design-motion-principles` (perspectiva Emil — produtividade)
