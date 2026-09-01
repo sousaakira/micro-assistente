@@ -77,10 +77,14 @@ export interface HAGEntry {
   relevance?: number;
 }
 
+export type LLMProvider = 'llama-cpp' | 'ollama' | 'openai';
+
 export interface LLMConfig {
+  provider: LLMProvider;
   baseUrl: string;
   model: string;
   maxTokens: number;
+  apiKey?: string;
 }
 
 export interface ChatSession {

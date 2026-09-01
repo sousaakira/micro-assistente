@@ -18,10 +18,16 @@ const HOST = process.env.AGENT_HOST ?? '127.0.0.1';
 const taskQueue = new TaskQueue(process.env.TASKS_DB_PATH ?? './data/tasks.db');
 const memory = new HAGMemory(process.env.HAG_PATH ?? './data/hag');
 const plugins = new PluginRegistry();
+import type { LLMProvider } from './types.js';
+
 const llm = new LLMClient({
-  baseUrl: process.env.LLM_BASE_URL ?? 'http://localhost:11434',
-  model: process.env.LLM_MODEL ?? 'gemma2:9b',
+  provider: (process.env.LLM_PROVIDER ?? 'llama-cpp') as LLMProvider,
+  baseUrl: process.env.LLM_BASE_URL ?? 'https://ia.lo',
+  model:
+    process.env.LLM_MODEL ??
+    'Gemma-4-E2B-Uncensored-HauhauCS-Aggressive-Q4_K_P.gguf',
   maxTokens: Number(process.env.LLM_MAX_TOKENS ?? 2048),
+  apiKey: process.env.LLM_API_KEY,
 });
 
 plugins.register(createBuiltinPlugin());

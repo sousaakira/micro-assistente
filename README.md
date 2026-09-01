@@ -4,7 +4,7 @@ Agente inteligente **leve** para automação de tarefas locais com IA local, mem
 
 ## Características
 
-- **IA local** — Otimizado para modelos com contexto limitado (Gemma, Llama, etc.)
+- **IA local** — llama-cpp, Ollama ou OpenAI-compatível (OmniRouter)
 - **Fila de tarefas** — Defina tarefas; o agente executa automaticamente
 - **Memória HAG** — Persistência externa à janela de contexto
 - **Plugins** — E-mail, WhatsApp, monitoramento de servidores (Fase 2)
@@ -13,7 +13,7 @@ Agente inteligente **leve** para automação de tarefas locais com IA local, mem
 ## Início Rápido
 
 ```bash
-# Pré-requisitos: Node 20+, npm ou yarn, Ollama
+# Pré-requisitos: Node 20+, npm ou yarn, llama-cpp server (ou Ollama)
 cp .env.example .env
 npm install   # ou: yarn install
 npm run dev   # ou: yarn dev

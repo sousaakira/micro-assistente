@@ -115,7 +115,7 @@ micro-assistente/
 
 - `AgentOrchestrator` — loop principal: pega tarefa → monta prompt mínimo → chama LLM → executa tool/plugin → atualiza HAG
 - `TaskQueue` — fila persistente (SQLite)
-- `LLMClient` — adapter Ollama/OpenAI-compatible
+- `LLMClient` — adapter llama-cpp / Ollama / OpenAI-compatível (OmniRouter)
 - `HAGMemory` — interface de memória externa
 - `PluginRegistry` — carrega e executa plugins
 
@@ -234,9 +234,21 @@ yarn typecheck
 ### Pré-requisitos
 
 - Node.js ≥ 20
-- npm (incluso no Node) ou Yarn 1.x/4.x
-- Ollama (ou LLM compatível) rodando localmente
-- Modelo configurado em `.env` (ex: `gemma2:9b`)
+- npm ou Yarn
+- **llama-cpp server** (`llama-server`) ou Ollama rodando
+- Modelo GGUF configurado em `.env`
+
+### Variáveis LLM (`.env`)
+
+| Variável | Padrão | Descrição |
+|----------|--------|-----------|
+| `LLM_PROVIDER` | `llama-cpp` | `llama-cpp`, `ollama` ou `openai` (OmniRouter) |
+| `LLM_BASE_URL` | `https://ia.lo` | URL raiz do servidor (sem `/v1`) |
+| `LLM_MODEL` | nome do `.gguf` | Modelo carregado no server |
+| `LLM_MAX_TOKENS` | `2048` | Limite de tokens de saída |
+| `LLM_API_KEY` | — | Bearer token (llama-cpp com `--api-key` ou OmniRouter) |
+
+**OmniRouter (futuro):** `LLM_PROVIDER=openai`, aponte `LLM_BASE_URL` para o gateway e defina `LLM_API_KEY`.
 
 ---
 

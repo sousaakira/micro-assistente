@@ -14,7 +14,7 @@ flowchart TB
         API[REST API]
         Orchestrator[Agent Orchestrator]
         TaskQueue[Task Queue - SQLite]
-        LLM[LLM Client - Ollama]
+        LLM[LLM Client - llama-cpp / OmniRouter]
         HAG[HAG Memory]
         Registry[Plugin Registry]
     end
