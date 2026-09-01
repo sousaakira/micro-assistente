@@ -201,7 +201,7 @@ func extractMessageFields(m *waE2E.Message) (msgType string, body string, captio
 		return "video", "", strings.TrimSpace(vid.GetCaption()), true, strings.TrimSpace(vid.GetMimetype())
 	}
 	if aud := m.GetAudioMessage(); aud != nil {
-		return "audio", "", "", true, strings.TrimSpace(aud.GetMimetype())
+		return "audio", "[áudio]", "", true, strings.TrimSpace(aud.GetMimetype())
 	}
 	if doc := m.GetDocumentMessage(); doc != nil {
 		return "document", "", strings.TrimSpace(doc.GetCaption()), true, strings.TrimSpace(doc.GetMimetype())

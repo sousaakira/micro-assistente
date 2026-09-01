@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,12 +21,18 @@ func (c *Client) maybeTranscribeAudio(e *events.Message) {
 	if audio == nil {
 		return
 	}
-	if strings.TrimSpace(os.Getenv("WHISPER_URL")) == "" && strings.TrimSpace(os.Getenv("LLM_BASE_URL")) == "" {
+	if !transcribe.IsEnabled() {
 		return
 	}
 
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		timeout := 3 * time.Minute
+		if raw := strings.TrimSpace(os.Getenv("WHISPER_TIMEOUT_MS")); raw != "" {
+			if ms, err := strconv.Atoi(raw); err == nil && ms > 0 {
+				timeout = time.Duration(ms) * time.Millisecond
+			}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout+30*time.Second)
 		defer cancel()
 
 		data, err := c.wa.Download(ctx, audio)

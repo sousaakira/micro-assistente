@@ -1,85 +1,153 @@
 package transcribe
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
 
-// TranscribeAudio sends audio bytes to a Whisper-compatible API and returns text.
-// Configure via WHISPER_URL (OpenAI /v1/audio/transcriptions) or Ollama-style endpoint.
+// TranscribeAudio transcreve áudio localmente via CLI openai-whisper (mesmo fluxo do Financeiro).
+// Requer ffmpeg no PATH. Configure WHISPER_BIN, WHISPER_MODEL, etc.
 func TranscribeAudio(ctx context.Context, audio []byte, mimeType string) (string, error) {
-	url := strings.TrimSpace(os.Getenv("WHISPER_URL"))
-	if url == "" {
-		url = strings.TrimSpace(os.Getenv("LLM_BASE_URL"))
-		if url != "" {
-			url = strings.TrimRight(url, "/") + "/v1/audio/transcriptions"
-		}
-	}
-	if url == "" {
-		return "", fmt.Errorf("WHISPER_URL não configurado")
+	if !IsEnabled() {
+		return "", fmt.Errorf("transcrição local desabilitada ou whisper não encontrado")
 	}
 
-	body := &bytes.Buffer{}
-	boundary := "akira-audio-boundary"
-	body.WriteString("--" + boundary + "\r\n")
-	body.WriteString(`Content-Disposition: form-data; name="file"; filename="audio.ogg"` + "\r\n")
-	if mimeType == "" {
-		mimeType = "audio/ogg"
-	}
-	body.WriteString("Content-Type: " + mimeType + "\r\n\r\n")
-	body.Write(audio)
-	body.WriteString("\r\n--" + boundary + "\r\n")
-	body.WriteString(`Content-Disposition: form-data; name="model"` + "\r\n\r\n")
-	model := strings.TrimSpace(os.Getenv("WHISPER_MODEL"))
-	if model == "" {
-		model = "whisper-1"
-	}
-	body.WriteString(model + "\r\n")
-	body.WriteString("--" + boundary + "--\r\n")
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
+	workDir, err := os.MkdirTemp("", "akira-whisper-")
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Content-Type", "multipart/form-data; boundary="+boundary)
-	if key := strings.TrimSpace(os.Getenv("LLM_API_KEY")); key != "" {
-		req.Header.Set("Authorization", "Bearer "+key)
+	defer os.RemoveAll(workDir)
+
+	ext := extensionForMime(mimeType)
+	inputPath := filepath.Join(workDir, "input"+ext)
+	if err := os.WriteFile(inputPath, audio, 0o644); err != nil {
+		return "", err
 	}
 
-	client := &http.Client{Timeout: 120 * time.Second}
-	res, err := client.Do(req)
+	timeout := timeoutFromEnv()
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	wavPath, err := ensureWav(ctx, inputPath, workDir)
 	if err != nil {
 		return "", err
 	}
-	defer res.Body.Close()
 
-	raw, err := io.ReadAll(res.Body)
-	if err != nil {
+	bin := envOr("WHISPER_BIN", "/home/akira/.local/bin/whisper")
+	model := envOr("WHISPER_MODEL", "tiny")
+	language := envOr("WHISPER_LANGUAGE", "Portuguese")
+	device := envOr("WHISPER_DEVICE", "cpu")
+
+	args := []string{
+		wavPath,
+		"--model", model,
+		"--language", language,
+		"--task", "transcribe",
+		"--device", device,
+		"--output_dir", workDir,
+		"--output_format", "txt",
+		"--verbose", "False",
+		"--fp16", "False",
+	}
+	if modelDir := strings.TrimSpace(os.Getenv("WHISPER_MODEL_DIR")); modelDir != "" {
+		args = append(args, "--model_dir", modelDir)
+	}
+
+	if err := runCommand(ctx, bin, args); err != nil {
 		return "", err
 	}
-	if res.StatusCode >= 300 {
-		return "", fmt.Errorf("whisper HTTP %d: %s", res.StatusCode, string(raw[:min(len(raw), 200)]))
+
+	baseName := strings.TrimSuffix(filepath.Base(wavPath), filepath.Ext(wavPath))
+	outPath := filepath.Join(workDir, baseName+".txt")
+	raw, err := os.ReadFile(outPath)
+	if err != nil {
+		return "", fmt.Errorf("whisper não gerou saída: %w", err)
 	}
 
-	var parsed struct {
-		Text string `json:"text"`
+	text := strings.TrimSpace(string(raw))
+	if text == "" {
+		return "", fmt.Errorf("whisper retornou texto vazio")
 	}
-	if err := json.Unmarshal(raw, &parsed); err != nil {
-		return strings.TrimSpace(string(raw)), nil
-	}
-	return strings.TrimSpace(parsed.Text), nil
+	return text, nil
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
+// IsEnabled reports whether local whisper transcription should run.
+func IsEnabled() bool {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("WHISPER_ENABLED")), "false") {
+		return false
 	}
-	return b
+	bin := envOr("WHISPER_BIN", "/home/akira/.local/bin/whisper")
+	if filepath.IsAbs(bin) {
+		if _, err := os.Stat(bin); err == nil {
+			return true
+		}
+	}
+	if _, err := exec.LookPath(bin); err == nil {
+		return true
+	}
+	return false
+}
+
+func ensureWav(ctx context.Context, inputPath, workDir string) (string, error) {
+	if strings.EqualFold(filepath.Ext(inputPath), ".wav") {
+		return inputPath, nil
+	}
+	wavPath := filepath.Join(workDir, "audio.wav")
+	if err := runCommand(ctx, "ffmpeg", []string{
+		"-y", "-i", inputPath, "-ar", "16000", "-ac", "1", wavPath,
+	}); err != nil {
+		return "", fmt.Errorf("ffmpeg: %w", err)
+	}
+	return wavPath, nil
+}
+
+func runCommand(ctx context.Context, command string, args []string) error {
+	cmd := exec.CommandContext(ctx, command, args...)
+	cmd.Env = os.Environ()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		tail := string(out)
+		if len(tail) > 500 {
+			tail = tail[len(tail)-500:]
+		}
+		return fmt.Errorf("%s %v: %s", command, err, tail)
+	}
+	return nil
+}
+
+func extensionForMime(mimeType string) string {
+	mt := strings.ToLower(strings.TrimSpace(mimeType))
+	switch {
+	case strings.Contains(mt, "mpeg"), strings.Contains(mt, "mp3"):
+		return ".mp3"
+	case strings.Contains(mt, "wav"):
+		return ".wav"
+	case strings.Contains(mt, "mp4"), strings.Contains(mt, "m4a"):
+		return ".m4a"
+	default:
+		return ".ogg"
+	}
+}
+
+func envOr(key, fallback string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func timeoutFromEnv() time.Duration {
+	ms := 180_000
+	if raw := strings.TrimSpace(os.Getenv("WHISPER_TIMEOUT_MS")); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			ms = n
+		}
+	}
+	return time.Duration(ms) * time.Millisecond
 }
