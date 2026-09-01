@@ -16,7 +16,8 @@
     "build": "npm run build --workspaces --if-present",
     "predev:core": "npm run build -w @micro-assistente/plugin-whatsapp --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "secrets:scan": "bash scripts/gitleaks.sh"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

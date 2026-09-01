@@ -94,6 +94,22 @@ docs: atualizar AGENTS.md com regras de plugin
 
 Cada merge em `main` via PR é um deploy. Não faça push direto em `main`.
 
+### 6. Segredos e Gitleaks (OBRIGATÓRIO)
+
+> **Nunca commite `.env`, tokens, chaves de API ou credenciais reais.**
+
+- `.env` está no `.gitignore` — use apenas `.env.example` com placeholders
+- Antes de abrir PR, rode: `npm run secrets:scan` (Gitleaks local ou via Docker)
+- CI roda Gitleaks em todo push/PR para `main` (`.github/workflows/gitleaks.yml`)
+- GitHub Secret Scanning ignora falsos positivos conhecidos (`.github/secret_scanning.yml`)
+
+**Falso positivo conhecido:** `plugins/whatsapp/whatsmeow/binary/token/token.go` contém a string `AIzaSyDR5yfaG7OG8sMTUj8kfQEb8T9pN8BM6Lk` — é um **token do dicionário binário do protocolo WhatsApp** (upstream whatsmeow), **não** é uma Google API Key real. Não revogue; está allowlisted.
+
+Se um secret **real** for exposto acidentalmente:
+1. Revogue/rota a credencial no provedor imediatamente
+2. Remova do código e do histórico git se necessário
+3. Nunca commite o valor real de volta
+
 ---
 
 ## Estrutura do Monorepo
@@ -267,6 +283,7 @@ Antes de abrir um PR, verifique:
 - [ ] Plugin não acoplado ao core (se aplicável)
 - [ ] `.env.example` atualizado (se novas vars)
 - [ ] Typecheck passa (`npm run typecheck`)
+- [ ] Gitleaks passa (`npm run secrets:scan`) — sem secrets reais no diff
 
 ---
 

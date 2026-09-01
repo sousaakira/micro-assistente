@@ -1,0 +1,20 @@
+# Gitleaks — detecta secrets antes de commit/merge.
+# Docs: https://github.com/gitleaks/gitleaks
+
+title = "micro-assistente"
+
+[extend]
+useDefault = true
+
+# Falsos positivos conhecidos (upstream / protocolo, não são secrets reais)
+[[allowlists]]
+description = "WhatsApp whatsmeow: dicionário de tokens binários do protocolo (upstream tulir/whatsmeow)"
+paths = [
+  '''plugins/whatsapp/whatsmeow/binary/token/token\.go''',
+]
+
+[[allowlists]]
+description = "Arquivos de exemplo — nunca contêm valores reais"
+paths = [
+  '''\.env\.example$''',
+]
