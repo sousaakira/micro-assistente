@@ -1,10 +1,12 @@
 import type { AgentOrchestrator } from '../orchestrator.js';
 import type { AgentPlugin, TaskStatus } from '../types.js';
 import type { TaskQueue } from '../task-queue.js';
+import type { TaskScheduler } from '../task-scheduler.js';
 
 export function createTasksPlugin(
   taskQueue: TaskQueue,
-  orchestrator: AgentOrchestrator
+  orchestrator: AgentOrchestrator,
+  scheduler?: TaskScheduler
 ): AgentPlugin {
   return {
     id: 'tasks',
@@ -128,6 +130,57 @@ export function createTasksPlugin(
           return { success: true, output: 'Agente parado.' };
         },
       },
+      ...(scheduler
+        ? [
+            {
+              name: 'list_schedules',
+              description: 'Lista agendamentos recorrentes (cron) configurados',
+              parameters: { type: 'object', properties: {} },
+              execute: async () => {
+                const items = scheduler.getAll();
+                if (items.length === 0) {
+                  return { success: true, output: 'Nenhum agendamento configurado.' };
+                }
+                const lines = items.map(
+                  (s) =>
+                    `- ${s.title} | cron: ${s.cron} | ${s.enabled ? 'ativo' : 'pausado'}${s.lastRunAt ? ` | última: ${s.lastRunAt}` : ''}`
+                );
+                return { success: true, output: lines.join('\n'), data: items };
+              },
+            },
+            {
+              name: 'create_schedule',
+              description:
+                'Cria tarefa recorrente. Cron: min hora dia mês dia-semana (ex: "0 9 * * *" = todo dia 9h)',
+              parameters: {
+                type: 'object',
+                properties: {
+                  title: { type: 'string', description: 'Título da tarefa' },
+                  description: { type: 'string', description: 'Descrição' },
+                  cron: { type: 'string', description: 'Expressão cron' },
+                },
+                required: ['title', 'cron'],
+              },
+              execute: async (args: Record<string, unknown>) => {
+                try {
+                  const schedule = scheduler.add({
+                    title: String(args.title),
+                    description: args.description ? String(args.description) : undefined,
+                    cron: String(args.cron),
+                  });
+                  return {
+                    success: true,
+                    output: `Agendamento criado: "${schedule.title}" (${schedule.cron}) id=${schedule.id}`,
+                    data: schedule,
+                  };
+                } catch (err) {
+                  const message = err instanceof Error ? err.message : String(err);
+                  return { success: false, output: message };
+                }
+              },
+            },
+          ]
+        : []),
     ],
   };
 }

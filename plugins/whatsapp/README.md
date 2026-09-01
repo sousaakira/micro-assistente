@@ -1,45 +1,34 @@
 # Plugin WhatsApp (embutido)
 
-Bot WhatsApp do AkiraBrain, embutido no Micro Assistente.
+Bot WhatsApp integrado ao Micro Assistente via **akira-brain** — leitura, envio, inbox e múltiplas sessões.
 
 ## Estrutura
 
 ```
 plugins/whatsapp/
-├── bridge/           # Bridge TypeScript → expõe tools ao agente
+├── bridge/           # Bridge TypeScript → tools + gerenciador de processos
+├── akira-brain/      # Serviço Go unificado (WA + API + SQLite)
 ├── whatsmeow/        # Fork whatsmeow (protocolo WA)
-├── whatsmeow-api/    # Serviço Go — enviar mensagens (:5000)
-├── akira-brain/      # Serviço Go — capturar/ler mensagens (:8765)
-└── scripts/          # Build
+└── whatsmeow-api/    # Legado — não usado pelo agente (send migrado para akira-brain)
 ```
 
 ## Primeira vez
 
 ```bash
-# Compilar binários Go
-npm run build:whatsapp
-
-# Copiar env (opcional — S3, SESSION, etc.)
-cp whatsmeow-api/.env.example whatsmeow-api/.env
+npm run build:whatsapp   # compila akira-brain
+npm run dev              # agente sobe as sessões automaticamente
 ```
 
-## Subir o bot
+## Múltiplas sessões
 
-```bash
-# Na raiz do monorepo
-npm run dev:whatsapp
-```
+Cada conta WhatsApp = um processo akira-brain com:
+- `data/whatsapp/sessions/{id}/` — session.db + akira-brain.db
+- Porta API própria (8765, 8766, …)
 
-- **whatsmeow-api** → http://127.0.0.1:5000 (envio)
-- **akira-brain serve** → http://127.0.0.1:8765 (leitura/inbox)
+Configure no painel **WhatsApp → Adicionar conta**.
 
 ## Integração com o agente
 
-O `@micro-assistente/core` carrega `@micro-assistente/plugin-whatsapp` automaticamente.
+Tools: `whatsapp_send_message`, `whatsapp_list_inbox`, `whatsapp_cobrar_contato`, etc.
 
-Tools: `whatsapp_send_message`, `whatsapp_cobrar_contato`, `whatsapp_list_inbox`, etc.
-
-## Sessão WhatsApp
-
-Na primeira execução, escaneie o QR no terminal do whatsmeow-api ou akira-brain.
-Sessão persistida em `whatsmeow-api/tokens/` e `akira-brain/data/session.db`.
+Sessão padrão configurável no painel (`defaultSessionId`).

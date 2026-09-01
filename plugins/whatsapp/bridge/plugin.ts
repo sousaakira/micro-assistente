@@ -1,28 +1,51 @@
 import type { AgentPlugin } from './agent-types.js';
-import { loadWhatsAppConfig, WhatsAppClient, normalizePhone } from './client.js';
+import type { WhatsAppService } from './service.js';
+import { normalizePhone } from './client.js';
 
-export function createWhatsAppPlugin(): AgentPlugin {
-  const client = new WhatsAppClient(loadWhatsAppConfig());
+export function createWhatsAppPlugin(service: WhatsAppService): AgentPlugin {
+  const client = service.getClient();
+
+  const guard = (): { success: false; output: string } | null => {
+    if (!service.getConfig().enabled) {
+      return {
+        success: false,
+        output: 'Plugin WhatsApp desativado no painel. Ative em WhatsApp → Configuração.',
+      };
+    }
+    return null;
+  };
 
   return {
     id: 'whatsapp',
     name: 'WhatsApp',
-    description:
-      'Integração com AkiraBrain (whatsmeow-api + akira-brain): enviar e ler mensagens WhatsApp',
+    description: 'Integração WhatsApp via akira-brain (leitura, envio, inbox, múltiplas sessões)',
     tools: [
       {
         name: 'whatsapp_status',
-        description: 'Verifica status da conexão WhatsApp (whatsmeow-api e akira-brain)',
+        description: 'Verifica status das sessões WhatsApp (akira-brain)',
         parameters: { type: 'object', properties: {} },
         execute: async () => {
-          const status = await client.getStatus();
+          const blocked = guard();
+          if (blocked) return blocked;
+          const sessions = service.getConfig().sessions.filter((s) => s.enabled);
+          const lines: string[] = [];
+
+          for (const session of sessions) {
+            const status = await client.getStatus(session.id);
+            const brain = status.apiOnline
+              ? await client.getAkiraBrainStatus(session.id).catch(() => null)
+              : null;
+            lines.push(
+              `[${session.label}] api: ${status.apiOnline ? 'online' : 'offline'}, ` +
+                `wa: ${status.connected ? 'conectado' : status.state}, ` +
+                `qr: ${brain?.qr_status || '—'}`
+            );
+          }
+
+          const anyConnected = lines.some((l) => l.includes('wa: conectado'));
           return {
-            success: status.connected || status.akiraBrain,
-            output:
-              `WhatsApp — whatsmeow: ${status.whatsmeow ? status.state : 'offline'}, ` +
-              `akira-brain: ${status.akiraBrain ? 'online' : 'offline'}, ` +
-              `conectado: ${status.connected ? 'sim' : 'não'}`,
-            data: status,
+            success: anyConnected || lines.length > 0,
+            output: lines.join('\n') || 'Nenhuma sessão WhatsApp configurada',
           };
         },
       },
@@ -39,6 +62,8 @@ export function createWhatsAppPlugin(): AgentPlugin {
           required: ['to', 'message'],
         },
         execute: async (args) => {
+          const blocked = guard();
+          if (blocked) return blocked;
           const to = String(args.to);
           const message = String(args.message);
           const output = await client.sendText(to, message);
@@ -57,6 +82,8 @@ export function createWhatsAppPlugin(): AgentPlugin {
           required: ['name'],
         },
         execute: async (args) => {
+          const blocked = guard();
+          if (blocked) return blocked;
           const chat = await client.findChatByName(String(args.name));
           if (!chat) {
             return {
@@ -73,6 +100,41 @@ export function createWhatsAppPlugin(): AgentPlugin {
         },
       },
       {
+        name: 'whatsapp_search_contacts',
+        description:
+          'Busca inteligente de contatos no inbox (nome parcial, múltiplas palavras, telefone)',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Nome, parte do nome ou telefone' },
+            limit: { type: 'number', description: 'Máximo de resultados (padrão 5)' },
+          },
+          required: ['query'],
+        },
+        execute: async (args) => {
+          const blocked = guard();
+          if (blocked) return blocked;
+          const query = String(args.query);
+          const limit = Number(args.limit ?? 5);
+          const matches = await client.searchContacts(query, limit);
+          if (matches.length === 0) {
+            return {
+              success: false,
+              output: `Nenhum contato encontrado para "${query}".`,
+            };
+          }
+          const lines = matches.map(
+            (c) =>
+              `- ${c.display_name || c.chat_jid} (${c.is_group ? 'grupo' : 'contato'}) → ${c.chat_jid}`
+          );
+          return {
+            success: true,
+            output: lines.join('\n'),
+            data: matches,
+          };
+        },
+      },
+      {
         name: 'whatsapp_list_inbox',
         description: 'Lista chats capturados pelo akira-brain (inbox e contatos conhecidos)',
         parameters: {
@@ -82,6 +144,8 @@ export function createWhatsAppPlugin(): AgentPlugin {
           },
         },
         execute: async () => {
+          const blocked = guard();
+          if (blocked) return blocked;
           const inbox = await client.listInbox();
           return { success: true, output: client.formatInbox(inbox), data: inbox };
         },
@@ -98,6 +162,8 @@ export function createWhatsAppPlugin(): AgentPlugin {
           required: ['chat'],
         },
         execute: async (args) => {
+          const blocked = guard();
+          if (blocked) return blocked;
           let chatRef = String(args.chat);
           const limit = Number(args.limit ?? 20);
 
@@ -125,6 +191,8 @@ export function createWhatsAppPlugin(): AgentPlugin {
           required: ['phone'],
         },
         execute: async (args) => {
+          const blocked = guard();
+          if (blocked) return blocked;
           const output = await client.checkNumber(String(args.phone));
           return { success: true, output };
         },
@@ -145,6 +213,8 @@ export function createWhatsAppPlugin(): AgentPlugin {
           required: ['name', 'message'],
         },
         execute: async (args) => {
+          const blocked = guard();
+          if (blocked) return blocked;
           const name = String(args.name);
           const message = String(args.message);
 

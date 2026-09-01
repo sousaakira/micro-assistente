@@ -6,10 +6,12 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/akira/akira-brain/internal/store"
 	"github.com/akira/akira-brain/internal/wa"
@@ -32,6 +34,9 @@ func New(s *store.Store, waClient *wa.Client) *Server {
 func (srv *Server) routes() {
 	srv.mux.HandleFunc("/api/health", srv.handleHealth)
 	srv.mux.HandleFunc("/api/status", srv.handleStatus)
+	srv.mux.HandleFunc("/api/check", srv.handleCheck)
+	srv.mux.HandleFunc("/api/send", srv.handleSend)
+	srv.mux.HandleFunc("/api/check-number", srv.handleCheckNumber)
 	srv.mux.HandleFunc("/api/projects", srv.handleProjects)
 	srv.mux.HandleFunc("/api/inbox", srv.handleInbox)
 	srv.mux.HandleFunc("/api/map", srv.handleMap)
@@ -73,6 +78,99 @@ func (srv *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, srv.wa.Status())
+}
+
+func (srv *Server) handleCheck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if srv.wa == nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"whatsapp_connected": false,
+			"connection_state":   "offline",
+		})
+		return
+	}
+	connected, state := srv.wa.ConnectionState()
+	st := srv.wa.Status()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"whatsapp_connected": connected,
+		"connection_state":   state,
+		"session_id":         st.SessionID,
+		"session_label":      st.SessionLabel,
+	})
+}
+
+type sendReq struct {
+	To      string `json:"to"`
+	Fone    string `json:"fone"`
+	Message string `json:"message"`
+}
+
+func (srv *Server) handleSend(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if srv.wa == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"st": 0, "error": "not_ready"})
+		return
+	}
+	var req sendReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"st": 0, "error": "invalid_json"})
+		return
+	}
+	to := strings.TrimSpace(req.To)
+	if to == "" {
+		to = strings.TrimSpace(req.Fone)
+	}
+	if to == "" || strings.TrimSpace(req.Message) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"st": 0, "error": "missing_fields"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	result, err := srv.wa.SendText(ctx, to, req.Message)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"st": 0, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"st": 1, "result": result})
+}
+
+type checkNumberReq struct {
+	Fone string `json:"fone"`
+	To   string `json:"to"`
+}
+
+func (srv *Server) handleCheckNumber(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if srv.wa == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"st": 0, "error": "not_ready"})
+		return
+	}
+	var req checkNumberReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"st": 0, "error": "invalid_json"})
+		return
+	}
+	phone := strings.TrimSpace(req.Fone)
+	if phone == "" {
+		phone = strings.TrimSpace(req.To)
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	result, err := srv.wa.IsOnWhatsApp(ctx, phone)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"st": 0, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"st": 1, "result": result})
 }
 
 type projectDTO struct {

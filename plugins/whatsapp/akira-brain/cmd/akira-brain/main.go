@@ -73,11 +73,24 @@ Uso:
   akira-brain messages chat <jid> [N]          mostra as últimas N mensagens de um chat (mapeado ou inbox)`)
 }
 
+func sessionMeta() (id, label string) {
+	id = strings.TrimSpace(os.Getenv("AKIRA_BRAIN_SESSION_ID"))
+	if id == "" {
+		id = "default"
+	}
+	label = strings.TrimSpace(os.Getenv("AKIRA_BRAIN_SESSION_LABEL"))
+	if label == "" {
+		label = id
+	}
+	return id, label
+}
+
 func cmdConnect(dataDir string, s *store.Store) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if _, err := wa.Connect(ctx, dataDir, s); err != nil {
+	sessionID, sessionLabel := sessionMeta()
+	if _, err := wa.Connect(ctx, dataDir, s, sessionID, sessionLabel); err != nil {
 		fatal(err)
 	}
 
@@ -95,7 +108,8 @@ func cmdServe(dataDir string, s *store.Store) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	waClient, err := wa.Connect(ctx, dataDir, s)
+	sessionID, sessionLabel := sessionMeta()
+	waClient, err := wa.Connect(ctx, dataDir, s, sessionID, sessionLabel)
 	if err != nil {
 		fatal(err)
 	}

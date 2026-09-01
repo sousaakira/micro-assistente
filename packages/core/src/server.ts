@@ -9,10 +9,14 @@ import { PluginRegistry } from './plugin-registry.js';
 import { TaskQueue } from './task-queue.js';
 import type { LLMProvider } from './types.js';
 import { createBuiltinPlugin } from './plugins/builtin.js';
+import { createEmailPlugin } from './plugins/email.js';
+import { createServersPlugin } from './plugins/servers.js';
 import { createTasksPlugin } from './plugins/tasks.js';
-import { createWhatsAppPlugin } from '@micro-assistente/plugin-whatsapp';
+import { TaskScheduler } from './task-scheduler.js';
+import { createWhatsAppPlugin, WhatsAppService } from '@micro-assistente/plugin-whatsapp';
 import { ChatStore } from './chat-store.js';
 import { ChatService } from './chat-service.js';
+import { registerWhatsAppRoutes } from './whatsapp-routes.js';
 
 const PORT = Number(process.env.AGENT_PORT ?? 3847);
 const HOST = process.env.AGENT_HOST ?? '127.0.0.1';
@@ -33,8 +37,15 @@ const llm = new LLMClient({
 
 plugins.register(createBuiltinPlugin());
 const orchestrator = new AgentOrchestrator(taskQueue, llm, memory, plugins);
-plugins.register(createTasksPlugin(taskQueue, orchestrator));
-plugins.register(createWhatsAppPlugin());
+const taskScheduler = new TaskScheduler(taskQueue.getDatabase(), taskQueue, orchestrator);
+plugins.register(createTasksPlugin(taskQueue, orchestrator, taskScheduler));
+plugins.register(createEmailPlugin());
+plugins.register(createServersPlugin());
+
+const whatsappService = new WhatsAppService(
+  process.env.WHATSAPP_CONFIG_PATH ?? './data/whatsapp-config.json'
+);
+plugins.register(createWhatsAppPlugin(whatsappService));
 
 const chatStore = new ChatStore(process.env.CHAT_DB_PATH ?? './data/chat.db');
 const chatService = new ChatService(chatStore, llm, memory, taskQueue, plugins);
@@ -91,6 +102,56 @@ app.delete('/tasks/:id', (req, res) => {
   const deleted = taskQueue.delete(req.params.id);
   if (!deleted) {
     res.status(404).json({ error: 'Tarefa não encontrada' });
+    return;
+  }
+  res.status(204).end();
+});
+
+const createScheduleSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().optional(),
+  cron: z.string().min(1),
+  pluginId: z.string().optional(),
+  autoRunAgent: z.boolean().optional(),
+  enabled: z.boolean().optional(),
+});
+
+app.get('/schedules', (_req, res) => {
+  res.json(taskScheduler.getAll());
+});
+
+app.post('/schedules', (req, res) => {
+  const parsed = createScheduleSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  try {
+    const schedule = taskScheduler.add(parsed.data);
+    res.status(201).json(schedule);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(400).json({ error: message });
+  }
+});
+
+app.patch('/schedules/:id', (req, res) => {
+  if (typeof req.body?.enabled !== 'boolean') {
+    res.status(400).json({ error: 'enabled (boolean) é obrigatório' });
+    return;
+  }
+  const schedule = taskScheduler.setEnabled(req.params.id, req.body.enabled);
+  if (!schedule) {
+    res.status(404).json({ error: 'Agendamento não encontrado' });
+    return;
+  }
+  res.json(schedule);
+});
+
+app.delete('/schedules/:id', (req, res) => {
+  const deleted = taskScheduler.delete(req.params.id);
+  if (!deleted) {
+    res.status(404).json({ error: 'Agendamento não encontrado' });
     return;
   }
   res.status(204).end();
@@ -157,8 +218,23 @@ app.post('/chat', async (req, res) => {
   }
 });
 
+registerWhatsAppRoutes(app, whatsappService);
+
+const shutdown = async (signal: string) => {
+  console.log(`\n${signal} — encerrando serviços WhatsApp…`);
+  await whatsappService.stopServices();
+  process.exit(0);
+};
+
+process.on('SIGINT', () => void shutdown('SIGINT'));
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+
 app.listen(PORT, HOST, () => {
   console.log(`Micro Assistente API → http://${HOST}:${PORT}`);
+  void whatsappService.ensureRunning().catch((err) => {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn('[whatsapp] auto-start:', message);
+  });
 });
 
-export { app, orchestrator, taskQueue, memory, plugins, llm, chatService, chatStore };
+export { app, orchestrator, taskQueue, taskScheduler, memory, plugins, llm, chatService, chatStore };

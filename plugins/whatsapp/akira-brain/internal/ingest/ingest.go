@@ -27,13 +27,24 @@ type Store interface {
 // only record metadata plus, for audio in a mapped project, note that a media path
 // is still pending.
 func PersistIncoming(s Store, e *events.Message) error {
+	return PersistIncomingNamed(s, e, "")
+}
+
+// PersistIncomingNamed is like PersistIncoming but accepts a pre-resolved chat display name
+// (ex.: nome do grupo via GetGroupInfo ou contato do cache whatsmeow).
+func PersistIncomingNamed(s Store, e *events.Message, chatDisplayName string) error {
 	if s == nil || e == nil || e.Info.ID == "" {
 		return nil
 	}
 	chatJID := e.Info.Chat.String()
 	isGroup := strings.HasSuffix(chatJID, "@g.us")
 
-	if err := s.UpsertContact(chatJID, "", isGroup); err != nil {
+	displayName := strings.TrimSpace(chatDisplayName)
+	if displayName == "" {
+		displayName = DisplayNameFromMessage(e, chatJID, isGroup)
+	}
+
+	if err := s.UpsertContact(chatJID, displayName, isGroup); err != nil {
 		return err
 	}
 
@@ -91,7 +102,11 @@ func PersistHistorySync(s Store, data *waHistorySync.HistorySync) error {
 			continue
 		}
 		isGroup := strings.HasSuffix(chatJID, "@g.us")
-		if err := s.UpsertContact(chatJID, "", isGroup); err != nil {
+		displayName := DisplayNameFromHistory(conv.GetName(), conv.GetDisplayName())
+		if displayName == "" && !isGroup {
+			displayName = JIDLocalPart(chatJID)
+		}
+		if err := s.UpsertContact(chatJID, displayName, isGroup); err != nil {
 			return err
 		}
 		for _, item := range conv.GetMessages() {

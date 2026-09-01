@@ -102,6 +102,7 @@ Cada merge em `main` via PR é um deploy. Não faça push direto em `main`.
 - Antes de abrir PR, rode: `npm run secrets:scan` (Gitleaks local ou via Docker)
 - CI roda Gitleaks em todo push/PR para `main` (`.github/workflows/gitleaks.yml`)
 - GitHub Secret Scanning ignora falsos positivos conhecidos (`.github/secret_scanning.yml`)
+- **WhatsApp:** o agente sobe `whatsmeow-api` e `akira-brain` automaticamente (`autoStart` no painel). Binários Go precisam existir (`npm run build:whatsapp` uma vez)
 
 **Falso positivo conhecido:** `plugins/whatsapp/whatsmeow/binary/token/token.go` contém a string `AIzaSyDR5yfaG7OG8sMTUj8kfQEb8T9pN8BM6Lk` — é um **token do dicionário binário do protocolo WhatsApp** (upstream whatsmeow), **não** é uma Google API Key real. Não revogue; está allowlisted.
 

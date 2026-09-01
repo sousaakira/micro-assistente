@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -260,6 +261,9 @@ func (s *Store) ListInboxSummaries() ([]InboxSummary, error) {
 			return nil, err
 		}
 		sum.IsGroup = isGroup != 0
+		if strings.TrimSpace(sum.DisplayName) == "" {
+			sum.DisplayName = jidLocalPart(sum.ChatJID)
+		}
 		out = append(out, sum)
 	}
 	if err := rows.Err(); err != nil {
@@ -328,6 +332,14 @@ func boolToInt(v bool) int {
 		return 1
 	}
 	return 0
+}
+
+func jidLocalPart(jid string) string {
+	jid = strings.TrimSpace(jid)
+	if at := strings.Index(jid, "@"); at > 0 {
+		return jid[:at]
+	}
+	return jid
 }
 
 func nullIfEmpty(s string) any {

@@ -1,20 +1,34 @@
 /**
- * Cliente HTTP para o ecossistema AkiraBrain (whatsmeow-api + akira-brain).
- * - whatsmeow-api: enviar mensagens, grupos, status de conexão
- * - akira-brain API: ler inbox e mensagens persistidas
+ * Cliente HTTP para akira-brain (leitura, envio, inbox, QR).
+ * Suporta múltiplas sessões — cada uma com porta/API própria.
  */
 
+export interface WhatsAppSessionConfig {
+  id: string;
+  label: string;
+  port: number;
+  enabled: boolean;
+}
+
 export interface WhatsAppConfig {
-  whatsmeowUrl: string;
-  akiraBrainUrl: string;
+  sessions: WhatsAppSessionConfig[];
+  defaultSessionId: string;
   timeoutMs?: number;
 }
 
 export interface WhatsAppConnectionStatus {
   connected: boolean;
   state: string;
-  whatsmeow: boolean;
-  akiraBrain: boolean;
+  apiOnline: boolean;
+}
+
+export interface AkiraBrainStatus {
+  session_id?: string;
+  session_label?: string;
+  connected: boolean;
+  logged_out: boolean;
+  qr_code: string;
+  qr_status: string;
 }
 
 export interface InboxChat {
@@ -37,34 +51,75 @@ export interface StoredMessage {
   is_media: boolean;
 }
 
+export interface AkiraBrainProject {
+  id: number;
+  name: string;
+  description: string;
+  created_at: number;
+}
+
 export class WhatsAppClient {
-  private timeoutMs: number;
+  private timeoutMs = 25_000;
+  private sessions = new Map<string, WhatsAppSessionConfig>();
+  private defaultSessionId = 'principal';
 
-  constructor(private config: WhatsAppConfig) {
+  constructor(config: WhatsAppConfig) {
+    this.applyConfig(config);
+  }
+
+  applyConfig(config: WhatsAppConfig): void {
     this.timeoutMs = config.timeoutMs ?? 25_000;
+    this.defaultSessionId = config.defaultSessionId;
+    this.sessions.clear();
+    for (const session of config.sessions) {
+      if (session.enabled) {
+        this.sessions.set(session.id, session);
+      }
+    }
   }
 
-  async getStatus(): Promise<WhatsAppConnectionStatus> {
-    const [whatsmeow, akiraBrain] = await Promise.all([
-      this.whatsmeowCheck(),
-      this.akiraBrainHealth(),
-    ]);
-
-    return {
-      connected: whatsmeow.connected,
-      state: whatsmeow.state,
-      whatsmeow: whatsmeow.ok,
-      akiraBrain: akiraBrain.ok,
-    };
+  listSessions(): WhatsAppSessionConfig[] {
+    return [...this.sessions.values()];
   }
 
-  async sendText(to: string, message: string): Promise<string> {
+  getSessionUrl(sessionId?: string): string {
+    const session = this.resolveSession(sessionId);
+    return `http://127.0.0.1:${session.port}`;
+  }
+
+  async getAkiraBrainStatus(sessionId?: string): Promise<AkiraBrainStatus> {
+    return this.fetchJSON<AkiraBrainStatus>(`${this.getSessionUrl(sessionId)}/api/status`);
+  }
+
+  async getStatus(sessionId?: string): Promise<WhatsAppConnectionStatus> {
+    const url = this.getSessionUrl(sessionId);
+    try {
+      const data = await this.fetchJSON<{
+        whatsapp_connected?: boolean;
+        connection_state?: string;
+      }>(`${url}/api/check`);
+      return {
+        apiOnline: true,
+        connected: !!data.whatsapp_connected,
+        state: data.connection_state ?? 'unknown',
+      };
+    } catch {
+      try {
+        await this.fetchJSON(`${url}/api/health`);
+        return { apiOnline: true, connected: false, state: 'starting' };
+      } catch {
+        return { apiOnline: false, connected: false, state: 'offline' };
+      }
+    }
+  }
+
+  async sendText(to: string, message: string, sessionId?: string): Promise<string> {
     const fone = normalizePhone(to);
-    const res = await this.fetchJSON<{ st?: number; error?: string; result?: unknown }>(
-      `${this.config.whatsmeowUrl}/bot-text-message`,
+    const res = await this.fetchJSON<{ st?: number; error?: string }>(
+      `${this.getSessionUrl(sessionId)}/api/send`,
       {
         method: 'POST',
-        body: JSON.stringify({ fone, message, type: 'text' }),
+        body: JSON.stringify({ to: fone, message, type: 'text' }),
       }
     );
 
@@ -74,10 +129,10 @@ export class WhatsAppClient {
     return `Mensagem enviada para ${fone}`;
   }
 
-  async checkNumber(phone: string): Promise<string> {
+  async checkNumber(phone: string, sessionId?: string): Promise<string> {
     const fone = normalizePhone(phone);
     const res = await this.fetchJSON<{ st?: number; error?: string; result?: unknown }>(
-      `${this.config.whatsmeowUrl}/check-number`,
+      `${this.getSessionUrl(sessionId)}/api/check-number`,
       {
         method: 'POST',
         body: JSON.stringify({ fone }),
@@ -90,37 +145,55 @@ export class WhatsAppClient {
     return `Número ${fone} está no WhatsApp: ${JSON.stringify(res.result)}`;
   }
 
-  async listInbox(): Promise<InboxChat[]> {
-    return this.fetchJSON<InboxChat[]>(`${this.config.akiraBrainUrl}/api/inbox`);
+  async listInbox(sessionId?: string): Promise<InboxChat[]> {
+    return this.fetchJSON<InboxChat[]>(`${this.getSessionUrl(sessionId)}/api/inbox`);
   }
 
-  async readMessages(chat: string, limit = 20): Promise<StoredMessage[]> {
+  async readMessages(chat: string, limit = 20, sessionId?: string): Promise<StoredMessage[]> {
     const chatJid = toChatJid(chat);
-    const url = `${this.config.akiraBrainUrl}/api/messages?chat=${encodeURIComponent(chatJid)}&limit=${limit}`;
+    const url = `${this.getSessionUrl(sessionId)}/api/messages?chat=${encodeURIComponent(chatJid)}&limit=${limit}`;
     return this.fetchJSON<StoredMessage[]>(url);
   }
 
-  async listGroups(): Promise<string> {
-    const res = await this.fetchJSON<{ st?: number; error?: string; result?: unknown }>(
-      `${this.config.whatsmeowUrl}/bot-grupo-get-all`,
-      { method: 'POST', body: JSON.stringify({}) }
-    );
-
-    if (res.st !== 1 && res.error) {
-      throw new Error(res.error);
-    }
-    return JSON.stringify(res.result ?? res, null, 2);
+  async listProjects(sessionId?: string): Promise<AkiraBrainProject[]> {
+    return this.fetchJSON<AkiraBrainProject[]>(`${this.getSessionUrl(sessionId)}/api/projects`);
   }
 
-  /** Busca contato no inbox pelo nome (ex: "Geovane") */
-  async findChatByName(name: string): Promise<InboxChat | null> {
-    const inbox = await this.listInbox();
-    const lower = name.toLowerCase();
-    return (
-      inbox.find((c) => c.display_name.toLowerCase().includes(lower)) ??
-      inbox.find((c) => c.chat_jid.toLowerCase().includes(lower)) ??
-      null
-    );
+  async createProject(
+    name: string,
+    description = '',
+    sessionId?: string
+  ): Promise<AkiraBrainProject> {
+    return this.fetchJSON<AkiraBrainProject>(`${this.getSessionUrl(sessionId)}/api/projects`, {
+      method: 'POST',
+      body: JSON.stringify({ name, description }),
+    });
+  }
+
+  async mapContactToProject(
+    jid: string,
+    projectId: number,
+    sessionId?: string
+  ): Promise<{ jid: string; project_id: number; project_name: string }> {
+    return this.fetchJSON(`${this.getSessionUrl(sessionId)}/api/map`, {
+      method: 'POST',
+      body: JSON.stringify({ jid, project_id: projectId }),
+    });
+  }
+
+  async findChatByName(name: string, sessionId?: string): Promise<InboxChat | null> {
+    const results = await this.searchContacts(name, 1, sessionId);
+    return results[0] ?? null;
+  }
+
+  async searchContacts(query: string, limit = 5, sessionId?: string): Promise<InboxChat[]> {
+    const inbox = await this.listInbox(sessionId);
+    return inbox
+      .map((chat) => ({ chat, score: scoreChatMatch(chat, query) }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map((item) => item.chat);
   }
 
   formatInbox(inbox: InboxChat[]): string {
@@ -145,29 +218,13 @@ export class WhatsAppClient {
       .join('\n');
   }
 
-  private async whatsmeowCheck(): Promise<{ ok: boolean; connected: boolean; state: string }> {
-    try {
-      const data = await this.fetchJSON<{
-        whatsapp_connected?: boolean;
-        connection_state?: string;
-      }>(`${this.config.whatsmeowUrl}/check`);
-      return {
-        ok: true,
-        connected: !!data.whatsapp_connected,
-        state: data.connection_state ?? 'unknown',
-      };
-    } catch {
-      return { ok: false, connected: false, state: 'offline' };
+  private resolveSession(sessionId?: string): WhatsAppSessionConfig {
+    const id = sessionId ?? this.defaultSessionId;
+    const session = this.sessions.get(id);
+    if (!session) {
+      throw new Error(`Sessão WhatsApp "${id}" não encontrada ou desativada`);
     }
-  }
-
-  private async akiraBrainHealth(): Promise<{ ok: boolean }> {
-    try {
-      await this.fetchJSON(`${this.config.akiraBrainUrl}/api/health`);
-      return { ok: true };
-    } catch {
-      return { ok: false };
-    }
+    return session;
   }
 
   private async fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
@@ -199,7 +256,6 @@ export class WhatsAppClient {
   }
 }
 
-/** Normaliza telefone para formato whatsmeow (5588998002111 ou com @s.whatsapp.net) */
 export function normalizePhone(raw: string): string {
   let s = raw.trim();
   if (s.includes('@')) return s;
@@ -218,9 +274,65 @@ export function toChatJid(raw: string): string {
 }
 
 export function loadWhatsAppConfig(): WhatsAppConfig {
+  const akiraBrainPort = portFromUrl(
+    (process.env.WHATSAPP_AKIRA_BRAIN_URL ?? 'http://127.0.0.1:8765').replace(/\/$/, ''),
+    8765
+  );
+  const sessionId = process.env.WHATSAPP_SESSION ?? 'principal';
+
   return {
-    whatsmeowUrl: (process.env.WHATSAPP_WHATSMEOW_URL ?? 'http://127.0.0.1:5000').replace(/\/$/, ''),
-    akiraBrainUrl: (process.env.WHATSAPP_AKIRA_BRAIN_URL ?? 'http://127.0.0.1:8765').replace(/\/$/, ''),
+    defaultSessionId: sessionId,
     timeoutMs: Number(process.env.WHATSAPP_TIMEOUT_MS ?? 25_000),
+    sessions: [
+      {
+        id: sessionId,
+        label: sessionId,
+        port: akiraBrainPort,
+        enabled: true,
+      },
+    ],
   };
+}
+
+function portFromUrl(url: string, fallback: number): number {
+  try {
+    const parsed = new URL(url);
+    if (parsed.port) return Number(parsed.port);
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeSearchText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .trim();
+}
+
+function scoreChatMatch(chat: InboxChat, query: string): number {
+  const q = normalizeSearchText(query);
+  if (!q) return 0;
+
+  const name = normalizeSearchText(chat.display_name || '');
+  const jid = chat.chat_jid.toLowerCase();
+  const phone = jid.split('@')[0] ?? '';
+  const digits = q.replace(/\D/g, '');
+
+  if (name === q) return 100;
+  if (name.startsWith(q)) return 90;
+  if (name.includes(q)) return 80;
+
+  const tokens = q.split(/\s+/).filter(Boolean);
+  if (tokens.length > 1 && tokens.every((token) => name.includes(token))) return 75;
+  if (tokens.some((token) => name.includes(token))) {
+    return 50 + tokens.filter((token) => name.includes(token)).length * 5;
+  }
+
+  if (digits.length >= 4 && phone.includes(digits)) return 65;
+  if (jid.includes(q)) return 40;
+
+  return 0;
 }

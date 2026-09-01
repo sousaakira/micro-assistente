@@ -169,6 +169,11 @@ export class TaskQueue {
   close(): void {
     this.db.close();
   }
+
+  /** Compartilha conexão SQLite (ex.: task_schedules na mesma base). */
+  getDatabase(): Database.Database {
+    return this.db;
+  }
 }
 
 interface Row {
