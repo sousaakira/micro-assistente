@@ -1,0 +1,16 @@
+# Binários Go
+whatsmeow-api/main
+akira-brain/akira-brain
+
+# Sessões e dados (nunca commitar)
+whatsmeow-api/tokens/
+whatsmeow-api/data/
+akira-brain/data/
+*.db
+
+# Env local
+.env
+
+# Node
+node_modules/
+dist/

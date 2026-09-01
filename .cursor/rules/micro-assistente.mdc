@@ -15,7 +15,7 @@ Leia **AGENTS.md** na raiz antes de qualquer alteração.
 ## Arquitetura
 - `packages/core` — orquestrador, LLM, fila, HAG, plugins
 - `packages/ui` — dashboard React com motion
-- Gerenciador de pacotes: **npm** ou **yarn** (não usar pnpm)
+- Plugins externos vivem em `plugins/` (ex: `plugins/whatsapp/` com bot Go embutido)
 - Plugins **nunca** acoplados ao core — use `PluginRegistry`
 
 ## IA local — contexto mínimo

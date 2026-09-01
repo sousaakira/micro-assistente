@@ -102,6 +102,8 @@ Cada merge em `main` via PR é um deploy. Não faça push direto em `main`.
 micro-assistente/
 ├── AGENTS.md              ← este arquivo
 ├── README.md
+├── plugins/
+│   └── whatsapp/          ← bot Go (whatsmeow) + bridge TypeScript
 ├── packages/
 │   ├── core/              ← orquestrador, LLM, fila, plugins loader
 │   └── ui/                ← dashboard React com motion

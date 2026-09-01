@@ -14,3 +14,10 @@ coverage/
 .cache/
 *.tsbuildinfo
 data/
+
+# Plugin WhatsApp — binários e sessões
+plugins/whatsapp/whatsmeow-api/main
+plugins/whatsapp/akira-brain/akira-brain
+plugins/whatsapp/whatsmeow-api/tokens/
+plugins/whatsapp/whatsmeow-api/data/
+plugins/whatsapp/akira-brain/data/

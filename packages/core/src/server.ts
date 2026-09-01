@@ -10,7 +10,7 @@ import { TaskQueue } from './task-queue.js';
 import type { LLMProvider } from './types.js';
 import { createBuiltinPlugin } from './plugins/builtin.js';
 import { createTasksPlugin } from './plugins/tasks.js';
-import { createWhatsAppPlugin } from './plugins/whatsapp/index.js';
+import { createWhatsAppPlugin } from '@micro-assistente/plugin-whatsapp';
 import { ChatStore } from './chat-store.js';
 import { ChatService } from './chat-service.js';
 

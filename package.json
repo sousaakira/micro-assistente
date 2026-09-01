@@ -4,14 +4,17 @@
   "private": true,
   "description": "Agente inteligente leve para tarefas locais com IA local, plugins e memória HAG",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "plugins/*"
   ],
   "scripts": {
     "dev": "concurrently -n core,ui -c blue,green \"npm run dev:core\" \"npm run dev:ui\"",
     "dev:core": "npm run dev -w @micro-assistente/core",
     "dev:ui": "npm run dev -w @micro-assistente/ui",
-    "dev:whatsapp": "concurrently -n wa,brain -c yellow,cyan \"bash scripts/whatsapp/start-whatsmeow.sh\" \"bash scripts/whatsapp/start-akira-brain.sh\"",
+    "dev:whatsapp": "concurrently -n wa,brain -c yellow,cyan \"npm run start:whatsmeow -w @micro-assistente/plugin-whatsapp\" \"npm run start:brain -w @micro-assistente/plugin-whatsapp\"",
+    "build:whatsapp": "npm run build:go -w @micro-assistente/plugin-whatsapp",
     "build": "npm run build --workspaces --if-present",
+    "predev:core": "npm run build -w @micro-assistente/plugin-whatsapp --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
