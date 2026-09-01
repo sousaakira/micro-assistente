@@ -265,6 +265,7 @@ Antes de abrir um PR, verifique:
 - [x] Arquitetura de plugins (#7)
 - [x] API REST (#9)
 - [x] AGENTS.md e workflow (#2)
+- [x] Sistema de chat com IA ciente das tarefas (#18)
 
 ### Fase 2 — Integrações
 - [ ] Plugin E-mail (#10)
