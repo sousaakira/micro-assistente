@@ -4,9 +4,12 @@ import { LLMClient } from './llm-client.js';
 import { PluginRegistry } from './plugin-registry.js';
 import { TaskQueue } from './task-queue.js';
 
-const SYSTEM_PROMPT = `Você é um assistente local leve. Execute tarefas de forma direta e concisa.
-Use as ferramentas disponíveis quando necessário. Respostas curtas.
-Memorize informações importantes para referência futura.`;
+const EXECUTION_SYSTEM = `Você está EXECUTANDO uma tarefa da fila — não criando uma nova.
+Regras:
+- NUNCA chame create_task, start_agent ou stop_agent.
+- Use apenas as ferramentas disponíveis para realizar a ação pedida.
+- Se não houver ferramenta para completar (ex: WhatsApp, e-mail), diga claramente que a tarefa está BLOQUEADA aguardando plugin e o que seria necessário.
+- Respostas curtas e objetivas em português.`;
 
 export class AgentOrchestrator {
   private running = false;
@@ -72,11 +75,34 @@ export class AgentOrchestrator {
   }
 
   private async executeTask(task: Task): Promise<string> {
+    if (taskRequiresExternalPlugin(task) && !task.pluginId) {
+      throw new Error(
+        'Tarefa bloqueada: requer plugin de integração (WhatsApp, e-mail, etc.) que ainda não está instalado. ' +
+          'Disponível na Fase 2.'
+      );
+    }
+
+    const tools = this.plugins.getExecutionTools(task.pluginId);
+
+    if (tools.length === 0 && task.pluginId) {
+      throw new Error(`Plugin "${task.pluginId}" não encontrado ou sem ferramentas.`);
+    }
+
+    if (tools.length === 0 && !task.pluginId) {
+      throw new Error(
+        'Tarefa bloqueada: nenhum plugin disponível para executar esta ação (ex: WhatsApp, e-mail). ' +
+          'Instale o plugin correspondente ou execute passos manuais.'
+      );
+    }
+
     const memoryContext = this.memory.formatForPrompt(task.title + ' ' + task.description);
-    const tools = this.plugins.getToolsForPlugin(task.pluginId);
+    const queueContext = this.taskQueue.formatQueueContext(400);
 
     const messages: LLMMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'system',
+        content: `${EXECUTION_SYSTEM}\n\nContexto da fila:\n${queueContext}`,
+      },
     ];
 
     if (memoryContext) {
@@ -85,12 +111,22 @@ export class AgentOrchestrator {
 
     messages.push({
       role: 'user',
-      content: buildTaskPrompt(task),
+      content: buildTaskPrompt(task, tools),
     });
 
     const response = await this.llm.chat(messages, tools.length > 0 ? tools : undefined);
 
     if (response.toolCalls && response.toolCalls.length > 0) {
+      const forbidden = response.toolCalls.filter((c) =>
+        ['create_task', 'start_agent', 'stop_agent'].includes(c.name)
+      );
+      if (forbidden.length > 0) {
+        throw new Error(
+          'Execução inválida: o modelo tentou criar outra tarefa em vez de executar. ' +
+            'Esta ação provavelmente requer um plugin (WhatsApp, e-mail) ainda não instalado.'
+        );
+      }
+
       const results: string[] = [];
 
       for (const call of response.toolCalls) {
@@ -104,25 +140,55 @@ export class AgentOrchestrator {
         results.push(toolResult.output);
       }
 
-      // Segundo turno mínimo — apenas resultado resumido
       const followUp: LLMMessage[] = [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: `Tarefa: ${task.title}\nResultados das ferramentas:\n${results.join('\n')}\nResuma o resultado em 2-3 frases.` },
+        { role: 'system', content: EXECUTION_SYSTEM },
+        {
+          role: 'user',
+          content: `Tarefa: ${task.title}\nResultados:\n${results.join('\n')}\nResuma o que foi feito em 2-3 frases. Se nada foi possível, diga que está bloqueada.`,
+        },
       ];
 
       const summary = await this.llm.chat(followUp);
       return summary.content || results.join('\n');
     }
 
-    return response.content || 'Tarefa concluída sem resposta.';
+    const content = response.content || '';
+    if (looksLikeBlocked(content)) {
+      throw new Error(content.slice(0, 500));
+    }
+
+    return content || 'Tarefa concluída sem resposta.';
   }
 }
 
-function buildTaskPrompt(task: Task): string {
-  let prompt = `Tarefa: ${task.title}`;
+function buildTaskPrompt(
+  task: Task,
+  tools: Array<{ name: string; description: string }>
+): string {
+  let prompt = `Execute agora (não crie nova tarefa):\nTítulo: ${task.title}`;
   if (task.description) prompt += `\nDescrição: ${task.description}`;
   if (task.params) prompt += `\nParâmetros: ${JSON.stringify(task.params)}`;
+  if (tools.length > 0) {
+    prompt += `\n\nFerramentas disponíveis: ${tools.map((t) => t.name).join(', ')}`;
+  } else {
+    prompt += '\n\nNenhuma ferramenta externa disponível — informe bloqueio se não puder executar.';
+  }
   return prompt;
+}
+
+function looksLikeBlocked(text: string): boolean {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes('bloqueada') ||
+    lower.includes('não tenho como') ||
+    lower.includes('nao tenho como') ||
+    (lower.includes('plugin') && lower.includes('necessár'))
+  );
+}
+
+function taskRequiresExternalPlugin(task: Task): boolean {
+  const text = `${task.title} ${task.description}`.toLowerCase();
+  return /whatsapp|e-?mail|mensagem|cobr|enviar|ligar|reunião|reuniao|slack|telegram/.test(text);
 }
 
 function sleep(ms: number): Promise<void> {

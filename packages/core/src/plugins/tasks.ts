@@ -84,8 +84,17 @@ export function createTasksPlugin(
           required: ['title'],
         },
         execute: async (args) => {
+          const title = String(args.title).trim();
+          const duplicate = taskQueue.findPendingByTitle(title);
+          if (duplicate) {
+            return {
+              success: false,
+              output: `Já existe tarefa pendente "${duplicate.title}" (id: ${duplicate.id}). Não crie duplicatas.`,
+            };
+          }
+
           const task = taskQueue.add({
-            title: String(args.title),
+            title,
             description: args.description ? String(args.description) : undefined,
           });
           return {

@@ -122,6 +122,16 @@ export class TaskQueue {
     return row.count;
   }
 
+  /** Evita duplicatas — compara título normalizado entre pendentes/running */
+  findPendingByTitle(title: string): Task | null {
+    const normalized = normalizeTitle(title);
+    const active = [
+      ...this.getByStatus('pending', 50),
+      ...this.getByStatus('running', 10),
+    ];
+    return active.find((t) => normalizeTitle(t.title) === normalized) ?? null;
+  }
+
   getByStatus(status: TaskStatus, limit = 20): Task[] {
     const rows = this.db
       .prepare('SELECT * FROM tasks WHERE status = ? ORDER BY created_at ASC LIMIT ?')
@@ -173,6 +183,10 @@ interface Row {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+}
+
+function normalizeTitle(title: string): string {
+  return title.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 function mapRow(row: Row): Task {

@@ -137,7 +137,7 @@ export class ChatService {
   }
 
   private getChatTools(): PluginTool[] {
-    return this.plugins.getAll().flatMap((p) => p.tools);
+    return this.plugins.getChatTools();
   }
 
   private buildMessages(sessionId: string, userMessage: string): LLMMessage[] {

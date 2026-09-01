@@ -14,19 +14,14 @@ export class LLMClient {
   async isAvailable(): Promise<boolean> {
     try {
       if (this.config.provider === 'ollama') {
-        const res = await fetch(`${this.rootUrl()}/api/tags`);
+        const res = await fetchWithTimeout(`${this.rootUrl()}/api/tags`, {}, 10_000);
         return res.ok;
       }
 
-      const res = await fetch(`${this.rootUrl()}/health`, {
-        headers: this.authHeaders(),
-      });
+      const res = await fetchWithTimeout(`${this.rootUrl()}/health`, { headers: this.authHeaders() }, 10_000);
       if (res.ok) return true;
 
-      // Fallback: alguns proxies não expõem /health
-      const models = await fetch(`${this.apiBaseUrl()}/models`, {
-        headers: this.authHeaders(),
-      });
+      const models = await fetchWithTimeout(`${this.apiBaseUrl()}/models`, { headers: this.authHeaders() }, 10_000);
       return models.ok;
     } catch {
       return false;
@@ -57,14 +52,18 @@ export class LLMClient {
       body.tool_choice = 'auto';
     }
 
-    const response = await fetch(`${this.apiBaseUrl()}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...this.authHeaders(),
+    const response = await fetchWithTimeout(
+      `${this.apiBaseUrl()}/chat/completions`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.authHeaders(),
+        },
+        body: JSON.stringify(body),
       },
-      body: JSON.stringify(body),
-    });
+      120_000
+    );
 
     if (!response.ok) {
       const text = await response.text();
@@ -116,11 +115,15 @@ export class LLMClient {
       }));
     }
 
-    const response = await fetch(`${this.rootUrl()}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    const response = await fetchWithTimeout(
+      `${this.rootUrl()}/api/chat`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+      120_000
+    );
 
     if (!response.ok) {
       const text = await response.text();
@@ -167,6 +170,25 @@ function parseToolArguments(args: string | Record<string, unknown>): Record<stri
     }
   }
   return args;
+}
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`LLM timeout após ${timeoutMs / 1000}s — o modelo pode estar sobrecarregado`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 interface OpenAIChatResponse {

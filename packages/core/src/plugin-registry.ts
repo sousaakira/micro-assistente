@@ -1,5 +1,12 @@
 import type { AgentPlugin, PluginTool } from './types.js';
 
+/** Tools de gestão — só no chat, nunca na execução automática de tarefas */
+export const CHAT_ONLY_TOOLS = new Set([
+  'create_task',
+  'start_agent',
+  'stop_agent',
+]);
+
 export class PluginRegistry {
   private plugins = new Map<string, AgentPlugin>();
 
@@ -27,6 +34,22 @@ export class PluginRegistry {
       return this.plugins.get(pluginId)?.tools ?? [];
     }
     return this.getAll().flatMap((p) => p.tools);
+  }
+
+  /** Tools disponíveis no chat (todas) */
+  getChatTools(): PluginTool[] {
+    return this.getAll().flatMap((p) => p.tools);
+  }
+
+  /** Tools para execução automática — sem create_task/start/stop; só plugin da tarefa ou builtin */
+  getExecutionTools(taskPluginId?: string): PluginTool[] {
+    if (taskPluginId) {
+      return this.getToolsForPlugin(taskPluginId).filter(
+        (t) => !CHAT_ONLY_TOOLS.has(t.name)
+      );
+    }
+    const builtin = this.plugins.get('builtin')?.tools ?? [];
+    return builtin.filter((t) => !CHAT_ONLY_TOOLS.has(t.name));
   }
 
   async loadAll(configs: Record<string, unknown> = {}): Promise<void> {

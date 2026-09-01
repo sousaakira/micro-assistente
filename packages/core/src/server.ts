@@ -7,6 +7,7 @@ import { HAGMemory } from './hag-memory.js';
 import { LLMClient } from './llm-client.js';
 import { PluginRegistry } from './plugin-registry.js';
 import { TaskQueue } from './task-queue.js';
+import type { LLMProvider } from './types.js';
 import { createBuiltinPlugin } from './plugins/builtin.js';
 import { createTasksPlugin } from './plugins/tasks.js';
 import { ChatStore } from './chat-store.js';
@@ -18,7 +19,6 @@ const HOST = process.env.AGENT_HOST ?? '127.0.0.1';
 const taskQueue = new TaskQueue(process.env.TASKS_DB_PATH ?? './data/tasks.db');
 const memory = new HAGMemory(process.env.HAG_PATH ?? './data/hag');
 const plugins = new PluginRegistry();
-import type { LLMProvider } from './types.js';
 
 const llm = new LLMClient({
   provider: (process.env.LLM_PROVIDER ?? 'llama-cpp') as LLMProvider,
