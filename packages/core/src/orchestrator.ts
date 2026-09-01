@@ -75,24 +75,18 @@ export class AgentOrchestrator {
   }
 
   private async executeTask(task: Task): Promise<string> {
-    if (taskRequiresExternalPlugin(task) && !task.pluginId) {
+    const pluginId = this.resolvePluginId(task);
+
+    if (taskRequiresExternalPlugin(task) && !pluginId) {
       throw new Error(
-        'Tarefa bloqueada: requer plugin de integração (WhatsApp, e-mail, etc.) que ainda não está instalado. ' +
-          'Disponível na Fase 2.'
+        'Tarefa bloqueada: requer plugin de integração (WhatsApp, e-mail) que não está disponível.'
       );
     }
 
-    const tools = this.plugins.getExecutionTools(task.pluginId);
+    const tools = this.plugins.getExecutionTools(pluginId);
 
-    if (tools.length === 0 && task.pluginId) {
-      throw new Error(`Plugin "${task.pluginId}" não encontrado ou sem ferramentas.`);
-    }
-
-    if (tools.length === 0 && !task.pluginId) {
-      throw new Error(
-        'Tarefa bloqueada: nenhum plugin disponível para executar esta ação (ex: WhatsApp, e-mail). ' +
-          'Instale o plugin correspondente ou execute passos manuais.'
-      );
+    if (tools.length === 0 && pluginId) {
+      throw new Error(`Plugin "${pluginId}" não encontrado ou sem ferramentas.`);
     }
 
     const memoryContext = this.memory.formatForPrompt(task.title + ' ' + task.description);
@@ -158,6 +152,14 @@ export class AgentOrchestrator {
     }
 
     return content || 'Tarefa concluída sem resposta.';
+  }
+
+  private resolvePluginId(task: Task): string | undefined {
+    if (task.pluginId) return task.pluginId;
+    if (taskRequiresExternalPlugin(task) && this.plugins.get('whatsapp')) {
+      return 'whatsapp';
+    }
+    return undefined;
   }
 }
 

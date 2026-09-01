@@ -10,6 +10,7 @@ import { TaskQueue } from './task-queue.js';
 import type { LLMProvider } from './types.js';
 import { createBuiltinPlugin } from './plugins/builtin.js';
 import { createTasksPlugin } from './plugins/tasks.js';
+import { createWhatsAppPlugin } from './plugins/whatsapp/index.js';
 import { ChatStore } from './chat-store.js';
 import { ChatService } from './chat-service.js';
 
@@ -33,6 +34,7 @@ const llm = new LLMClient({
 plugins.register(createBuiltinPlugin());
 const orchestrator = new AgentOrchestrator(taskQueue, llm, memory, plugins);
 plugins.register(createTasksPlugin(taskQueue, orchestrator));
+plugins.register(createWhatsAppPlugin());
 
 const chatStore = new ChatStore(process.env.CHAT_DB_PATH ?? './data/chat.db');
 const chatService = new ChatService(chatStore, llm, memory, taskQueue, plugins);

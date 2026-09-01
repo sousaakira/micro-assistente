@@ -10,6 +10,7 @@
     "dev": "concurrently -n core,ui -c blue,green \"npm run dev:core\" \"npm run dev:ui\"",
     "dev:core": "npm run dev -w @micro-assistente/core",
     "dev:ui": "npm run dev -w @micro-assistente/ui",
+    "dev:whatsapp": "concurrently -n wa,brain -c yellow,cyan \"bash scripts/whatsapp/start-whatsmeow.sh\" \"bash scripts/whatsapp/start-akira-brain.sh\"",
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"

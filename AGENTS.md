@@ -146,7 +146,7 @@ interface AgentPlugin {
 | Plugin | Issue | Status |
 |--------|-------|--------|
 | E-mail (ler/responder) | #10 | Fase 2 |
-| WhatsApp (ler/enviar) | #11 | Fase 2 |
+| WhatsApp (ler/enviar) | #11 | **Ativo** — AkiraBrain whatsmeow-api + akira-brain |
 | Monitoramento de servidores (HD, CPU, serviços) | #12 | Fase 2 |
 
 Ao implementar plugins, **nunca** embuta lógica de integração no core — sempre via plugin.
@@ -281,7 +281,7 @@ Antes de abrir um PR, verifique:
 
 ### Fase 2 — Integrações
 - [ ] Plugin E-mail (#10)
-- [ ] Plugin WhatsApp (#11)
+- [x] Plugin WhatsApp (#11) — via AkiraBrain
 - [ ] Plugin Monitoramento de Servidores (#12)
 
 ---
