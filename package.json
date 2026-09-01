@@ -1,0 +1,18 @@
+{
+  "name": "micro-assistente",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agente inteligente leve para tarefas locais com IA local, plugins e memória HAG",
+  "scripts": {
+    "dev": "pnpm --parallel -r dev",
+    "dev:core": "pnpm --filter @micro-assistente/core dev",
+    "dev:ui": "pnpm --filter @micro-assistente/ui dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0"
+}
